@@ -13,6 +13,7 @@ echo "🚀 Starting deploy..."
 
 # echo "🤖 Copying qwen-automate folder to server..."
 # rsync -avz "$LOCAL_PATH/qwen-automate/" "$SERVER:$REMOTE_PATH/qwen-automate/"
+# rsync -avz "$LOCAL_PATH/uploads/" "$SERVER:$REMOTE_PATH/uploads/"
 
 # 2️⃣ SSH once to stop API, clean old DB (already synced if needed), and restart safely
 

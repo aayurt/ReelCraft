@@ -2,8 +2,9 @@ module.exports = {
   apps: [
     {
       name: 'reely',
-      script: 'npm', // 🟢 Use npm as the runner
-      args: 'start', // 🟢 Pass 'start' as the script argument
+      script: 'npm',
+      args: 'start',
+      cwd: '/var/www/ReelCraft',
       instances: 'max',
       exec_mode: 'cluster',
       max_memory_restart: '1G',
