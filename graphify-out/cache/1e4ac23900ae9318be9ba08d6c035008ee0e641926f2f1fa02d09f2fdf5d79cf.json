@@ -1,0 +1,1 @@
+{"nodes": [{"id": "lib_schema_ts", "label": "schema.ts", "file_type": "code", "source_file": "lib/schema.ts", "source_location": "L1"}], "edges": [{"source": "lib_schema_ts", "target": "pg_core", "relation": "imports_from", "confidence": "EXTRACTED", "source_file": "lib/schema.ts", "source_location": "L1", "weight": 1.0}]}

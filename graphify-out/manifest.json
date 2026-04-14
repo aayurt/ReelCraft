@@ -1,0 +1,23 @@
+{
+  "next-env.d.ts": 1776105539.6641712,
+  "tailwind.config.ts": 1776104729.0782466,
+  "drizzle.config.ts": 1776105467.0547895,
+  "postcss.config.js": 1776104731.2067149,
+  "app/layout.tsx": 1776106258.316546,
+  "app/page.tsx": 1776105293.8408108,
+  "app/api/auth/[...all]/route.ts": 1776106175.8958461,
+  "app/(auth)/layout.tsx": 1776105264.5812337,
+  "app/(auth)/register/page.tsx": 1776106255.7831557,
+  "app/(auth)/login/page.tsx": 1776106251.5469165,
+  "app/(dashboard)/layout.tsx": 1776105285.2247882,
+  "app/(dashboard)/dashboard/page.tsx": 1776105291.1839979,
+  "components/providers.tsx": 1776106129.5800734,
+  "components/ui/card.tsx": 1776105233.6920085,
+  "components/ui/button.tsx": 1776105222.145719,
+  "components/ui/input.tsx": 1776105229.2127376,
+  "lib/schema.ts": 1776105167.2062495,
+  "lib/utils.ts": 1776105202.5666487,
+  "lib/auth.ts": 1776106185.6335366,
+  "docs/superpowers/plans/2026-04-14-auth-dashboard-plan.md": 1776104440.857583,
+  "docs/superpowers/specs/2026-04-14-videoforge-design.md": 1776104396.1540031
+}
