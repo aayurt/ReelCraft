@@ -75,7 +75,7 @@ async function generateVideoFromImage(imagePath, prompt, outputName, authStatePa
     throw new Error(`Auth state file not found: ${authStatePath}`);
   }
 
-  const browser = await chromium.launch({ headless: false });
+  const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({ storageState: authStatePath });
   const page = await context.newPage();
 

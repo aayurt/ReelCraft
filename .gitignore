@@ -12,3 +12,4 @@ qwen-automate/outputs/
 qwen-automate/auth_states/
 qwen-automate/verify/
 qwen-automate/verify/*
+qwen-automate/error_screenshot.png
