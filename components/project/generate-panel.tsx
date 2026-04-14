@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { PROMPT_TEMPLATES, type PromptStyle } from '@/lib/qwen-prompts';
+import { PROMPT_TEMPLATES, generatePrompt, type PromptStyle } from '@/lib/qwen-prompts';
 
 interface Frame {
   id: number;
