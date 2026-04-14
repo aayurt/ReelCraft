@@ -1,11 +1,11 @@
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/auth";
-import { projects, images } from "@/lib/schema";
+import { projects, videos } from "@/lib/schema";
 import { eq, and } from "drizzle-orm";
 import { redirect } from "next/navigation";
-import { ProjectEditorClient } from "@/components/project/project-editor-client";
+import { VideosPageClient } from "@/components/project/videos-page-client";
 
-export default async function ProjectEditorPage({
+export default async function VideosPage({
   params,
 }: {
   params: Promise<{ id: string }>;
@@ -31,23 +31,24 @@ export default async function ProjectEditorPage({
     redirect("/dashboard");
   }
   
-  const projectImages = await db.query.images.findMany({
-    where: eq(images.projectId, projectId),
+  const projectVideos = await db.query.videos.findMany({
+    where: eq(videos.projectId, projectId),
     columns: {
       id: true,
       url: true,
       filename: true,
       order: true,
       duration: true,
-      prompt: true,
-      audioUrl: true,
+      transitionType: true,
+      transitionDuration: true,
+      source: true,
     },
   });
   
   return (
-    <ProjectEditorClient 
+    <VideosPageClient 
       project={project} 
-      imagesList={projectImages}
+      videosList={projectVideos}
     />
   );
 }

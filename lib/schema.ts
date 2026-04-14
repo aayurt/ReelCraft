@@ -93,7 +93,24 @@ export const generations = pgTable("generations", {
   completedAt: timestamp("completed_at"),
 });
 
+export const videos = pgTable("videos", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id")
+    .notNull()
+    .references(() => projects.id),
+  url: text("url").notNull(),
+  filename: varchar("filename", { length: 255 }).notNull(),
+  order: integer("order").notNull(),
+  duration: integer("duration").notNull().default(5),
+  transitionType: varchar("transition_type", { length: 50 }).notNull().default("none"),
+  transitionDuration: integer("transition_duration").notNull().default(1),
+  source: varchar("source", { length: 50 }).notNull().default("generated"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 export type User = typeof users.$inferSelect;
 export type Project = typeof projects.$inferSelect;
 export type Image = typeof images.$inferSelect;
 export type Generation = typeof generations.$inferSelect;
+export type Video = typeof videos.$inferSelect;

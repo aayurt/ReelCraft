@@ -13,7 +13,7 @@ interface ImageCardProps {
     audioUrl: string | null;
   };
   onClick: () => void;
-  onUpdate: (id: number, updates: { order?: number; duration?: number }) => void;
+  onUpdate: (id: number, updates: Partial<{ order: number; duration: number; prompt: string; audioUrl: string | null }>) => void;
   onDelete: (id: number) => void;
 }
 
@@ -37,7 +37,7 @@ export function ImageCard({ image, onClick, onUpdate, onDelete }: ImageCardProps
   };
   
   return (
-    <div className="relative group" onClick={onClick}>
+    <div className="relative group">
       {image.filename === "CONTINUE_FRAME" ? (
         <div className="w-full h-32 bg-secondary rounded flex flex-col items-center justify-center p-4 text-center border-2 border-dashed border-primary/50 relative overflow-hidden">
           <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary mb-2 opacity-80"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><line x1="9" x2="15" y1="3" y2="3"/><line x1="9" x2="15" y1="21" y2="21"/><line x1="9" x2="15" y1="9" y2="9"/><line x1="9" x2="15" y1="15" y2="15"/></svg>
@@ -51,9 +51,21 @@ export function ImageCard({ image, onClick, onUpdate, onDelete }: ImageCardProps
           className="w-full h-32 object-cover rounded shadow-sm border border-border"
         />
       )}
-      <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity rounded flex items-center justify-center gap-2">
+      <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity rounded flex flex-col items-center justify-center gap-3">
         <button
-          onClick={() => onDelete(image.id)}
+          onClick={(e) => {
+            e.stopPropagation();
+            onClick();
+          }}
+          className="bg-primary hover:bg-primary/90 text-primary-foreground px-4 py-2 rounded text-sm font-medium transition-colors shadow-sm"
+        >
+          Edit Frame
+        </button>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete(image.id);
+          }}
           className="bg-destructive hover:bg-destructive/90 text-destructive-foreground px-3 py-1.5 rounded text-xs font-medium transition-colors shadow-sm"
         >
           Remove

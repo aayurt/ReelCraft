@@ -11,13 +11,15 @@ interface Image {
   filename: string;
   order: number;
   duration: number;
+  prompt: string;
+  audioUrl: string | null;
 }
 
 interface ImageGridProps {
   projectId: number;
   images: Image[];
   onReorder: (images: Image[]) => void;
-  onUpdate: (id: number, updates: { order?: number; duration?: number }) => void;
+  onUpdate: (id: number, updates: Partial<Image>) => void;
   onDelete: (id: number) => void;
   onUploadComplete: () => void;
 }

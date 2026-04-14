@@ -54,7 +54,7 @@ export async function POST(
     projectId,
     url: `/uploads/${id}/${filename}`,
     filename: file.name,
-    order: projectImages.length,
+    order: projectImages.length + 1,
     duration: project.defaultDuration,
     prompt: "",
     audioUrl: null,

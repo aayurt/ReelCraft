@@ -8,7 +8,7 @@ import { projects, images, generations } from "@/lib/schema";
 import { eq, and, desc } from "drizzle-orm";
 
 import { ImageGrid } from "@/components/project/image-grid";
-import { GenerateButton } from "@/components/project/generate-button";
+import { GeneratePanel } from "@/components/project/generate-panel";
 
 interface ProjectEditorProps {
   project: {
@@ -82,42 +82,45 @@ export function ProjectEditorClient({ project, imagesList }: ProjectEditorProps)
       </div>
       
       <div className="grid grid-cols-3 gap-8">
-        <div className="col-span-2">
-          <h2 className="text-xl font-semibold mb-4">Storyboard</h2>
-          <ImageGrid
-            projectId={project.id}
-            onUploadComplete={handleUploadComplete}
-            images={images}
-            onReorder={async (newImages) => {
-              setImages(newImages);
-              await fetch(`/api/projects/${project.id}/images/reorder`, {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ images: newImages.map(img => ({ id: img.id, order: img.order })) }),
-              });
-            }}
-            onUpdate={async (id, updates) => {
-              setImages(images.map(img => img.id === id ? { ...img, ...updates } : img));
-              await fetch(`/api/projects/${project.id}/images/${id}`, {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(updates),
-              });
-            }}
-            onDelete={async (id) => {
-              setImages(images.filter(img => img.id !== id));
-              await fetch(`/api/projects/${project.id}/images/${id}`, {
-                method: "DELETE"
-              });
-            }}
-          />
+        <div className="col-span-2 space-y-8">
+          <div>
+            <h2 className="text-xl font-semibold mb-4">Storyboard</h2>
+            <ImageGrid
+              projectId={project.id}
+              onUploadComplete={handleUploadComplete}
+              images={images}
+              onReorder={async (newImages) => {
+                setImages(newImages);
+                await fetch(`/api/projects/${project.id}/images/reorder`, {
+                  method: "PUT",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ images: newImages.map(img => ({ id: img.id, order: img.order })) }),
+                });
+              }}
+              onUpdate={async (id, updates) => {
+                setImages(images.map(img => img.id === id ? { ...img, ...updates } : img));
+                await fetch(`/api/projects/${project.id}/images/${id}`, {
+                  method: "PUT",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify(updates),
+                });
+              }}
+              onDelete={async (id) => {
+                setImages(images.filter(img => img.id !== id));
+                await fetch(`/api/projects/${project.id}/images/${id}`, {
+                  method: "DELETE"
+                });
+              }}
+            />
+          </div>
         </div>
         
-        <div>
-          <h2 className="text-xl font-semibold mb-4">Settings</h2>
-          <div className="space-y-4 mb-8">
+        <div className="space-y-8">
+          {/* Settings */}
+          <div>
+            <h2 className="text-xl font-semibold mb-4">Settings</h2>
             <div>
-              <label className="block text-sm font-medium mb-2">
+              <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1.5">
                 Default Duration (sec)
               </label>
               <input
@@ -125,86 +128,31 @@ export function ProjectEditorClient({ project, imagesList }: ProjectEditorProps)
                 min="3"
                 max="6"
                 defaultValue={project.defaultDuration}
-                className="w-full bg-background border rounded px-3 py-2"
+                className="w-full bg-background border border-border rounded px-3 py-2 text-sm focus:ring-1 focus:ring-primary outline-none transition-all"
                 onChange={(e) => saveSettings({ defaultDuration: Number(e.target.value) })}
                 disabled={saving}
               />
             </div>
-            <div>
-              <label className="block text-sm font-medium mb-2">
-                Transition
-              </label>
-              <select
-                defaultValue={project.transitionType}
-                className="w-full bg-background border rounded px-3 py-2"
-                onChange={(e) => saveSettings({ transitionType: e.target.value })}
-              >
-                <option value="none">None</option>
-                <option value="fade">Fade</option>
-                <option value="slide">Slide</option>
-                <option value="dissolve">Dissolve</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-2">
-                Transition Duration (sec)
-              </label>
-              <input
-                type="number"
-                min="0.5"
-                max="2"
-                step="0.5"
-                defaultValue={project.transitionDuration}
-                className="w-full bg-background border rounded px-3 py-2"
-                onChange={(e) => saveSettings({ transitionDuration: Number(e.target.value) })}
-                disabled={saving}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-2">
-                Audio
-              </label>
-              {project.audioUrl ? (
-                <div className="flex items-center gap-2">
-                  <audio controls src={project.audioUrl} className="flex-1" />
-                  <button
-                    type="button"
-                    className="text-red-500 text-sm"
-                    onClick={async () => {
-                      await fetch(`/api/projects/${project.id}`, {
-                        method: "PATCH",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ audioUrl: null }),
-                      });
-                      router.refresh();
-                    }}
-                  >
-                    Remove
-                  </button>
-                </div>
-              ) : (
-                <input
-                  type="file"
-                  accept="audio/*"
-                  className="w-full bg-background border rounded px-3 py-2"
-                  onChange={async (e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-                    const formData = new FormData();
-                    formData.append("audio", file);
-                    await fetch(`/api/projects/${project.id}/audio`, {
-                      method: "POST",
-                      body: formData,
-                    });
-                    router.refresh();
-                  }}
-                />
-              )}
-            </div>
           </div>
-          
-          <h2 className="text-xl font-semibold mb-4">Generate</h2>
-          <GenerateButton projectId={project.id} onComplete={handleUploadComplete} />
+
+          <hr className="border-border" />
+
+          {/* Generate Videos */}
+          <div>
+            <h2 className="text-xl font-semibold mb-1">Generate Videos</h2>
+            <p className="text-xs text-muted-foreground mb-4">Generate a clip for each frame. Set a transition after each clip.</p>
+            <GeneratePanel
+              projectId={project.id}
+              images={images}
+              onComplete={handleUploadComplete}
+            />
+            <a
+              href={`/project/${project.id}/videos`}
+              className="block text-center text-sm text-primary hover:underline mt-2"
+            >
+              Manage Videos →
+            </a>
+          </div>
         </div>
       </div>
     </div>

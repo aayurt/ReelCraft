@@ -1,9 +1,9 @@
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/auth";
-import { projects, images, generations } from "@/lib/schema";
+import { projects, images, videos } from "@/lib/schema";
 import { eq, and, desc } from "drizzle-orm";
 import { generateVideo, captureFrame } from "@/lib/video-generator";
-import { mkdir } from "fs/promises";
+import { mkdir, unlink } from "fs/promises";
 import { join } from "path";
 
 export async function POST(
@@ -31,7 +31,7 @@ export async function POST(
   }
   
   const body = await request.json();
-  const { type = "new" } = body;
+  const { frameTransitions = {} } = body;
   
   const imageList = await db.query.images.findMany({
     where: eq(images.projectId, projectId),
@@ -41,39 +41,48 @@ export async function POST(
     return Response.json({ error: "No images in project" }, { status: 400 });
   }
   
-  const outputDir = join(process.cwd(), "uploads", id, "generated");
+  const outputDir = join(process.cwd(), "uploads", "videos", id);
   await mkdir(outputDir, { recursive: true });
   
-  const outputPath = join(outputDir, `${Date.now()}-video.mp4`);
-  
-  const [generation] = await db.insert(generations).values({
-    projectId,
-    type,
-    status: "processing",
-  }).returning();
+  const sortedImages = [...imageList].sort((a, b) => a.order - b.order);
+  const generatedVideos = [];
   
   try {
-    await generateVideo({
-      projectId,
-      images: imageList.map(img => ({ url: img.url, duration: img.duration })),
-      transitionType: project.transitionType as any,
-      transitionDuration: project.transitionDuration,
-      audioUrl: project.audioUrl,
-      outputPath,
-    });
+    for (let i = 0; i < sortedImages.length; i++) {
+      const img = sortedImages[i];
+      const transitionType = frameTransitions[img.id] || project.transitionType;
+      const transitionDuration = project.transitionDuration;
+      
+      const outputPath = join(outputDir, `${Date.now()}-${i}-video.mp4`);
+      
+      await generateVideo({
+        projectId,
+        images: [{ url: img.url, duration: img.duration, transitionType: transitionType as any, transitionDuration }],
+        audioUrl: null,
+        outputPath,
+      });
+      
+      const existingVideos = await db.query.videos.findMany({
+        where: eq(videos.projectId, projectId),
+      });
+      
+      const [video] = await db.insert(videos).values({
+        projectId,
+        url: `/uploads/videos/${id}/${outputPath.split("/").pop()}`,
+        filename: `clip-${i + 1}.mp4`,
+        order: existingVideos.length + 1,
+        duration: img.duration,
+        transitionType: transitionType as any,
+        transitionDuration,
+        source: "generated",
+      }).returning();
+      
+      generatedVideos.push(video);
+    }
     
-    await db.update(generations)
-      .set({ status: "completed", outputUrl: outputPath, completedAt: new Date() })
-      .where(eq(generations.id, generation.id));
-    
-    return Response.json({ success: true, outputUrl: outputPath });
+    return Response.json({ success: true, videos: generatedVideos });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Generation failed";
-    
-    await db.update(generations)
-      .set({ status: "failed" })
-      .where(eq(generations.id, generation.id));
-    
     return Response.json({ error: errorMessage }, { status: 500 });
   }
 }

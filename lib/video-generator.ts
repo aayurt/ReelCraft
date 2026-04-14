@@ -142,6 +142,94 @@ export async function generateVideo(options: GenerateOptions): Promise<string> {
   });
 }
 
+export async function combineVideos(options: {
+  videos: Array<{ url: string; duration: number; transitionType: string; transitionDuration: number }>;
+  audioUrl: string | null;
+  outputPath: string;
+}): Promise<string> {
+  const { videos, audioUrl, outputPath } = options;
+  
+  const hasFfmpeg = await checkFfmpeg();
+  if (!hasFfmpeg) {
+    throw new Error("FFmpeg not installed. Please install FFmpeg first: brew install ffmpeg");
+  }
+  
+  if (videos.length === 0) {
+    throw new Error("No videos to combine");
+  }
+  
+  await mkdir(dirname(outputPath), { recursive: true });
+  
+  const inputArgs: string[] = ["-y"];
+  for (const vid of videos) {
+    inputArgs.push("-i", join(process.cwd(), vid.url));
+  }
+  
+  let filterComplex = "";
+  for (let i = 0; i < videos.length; i++) {
+    const vid = videos[i];
+    const dur = vid.duration;
+    let transFilter = "";
+    
+    if (vid.transitionType === "fade") {
+      const transDur = vid.transitionDuration;
+      transFilter = `fade=t=in:st=0:d=${transDur},fade=t=out:st=${dur - transDur}:d=${transDur}`;
+    } else if (vid.transitionType === "slide") {
+      const dir = i % 2 === 0 ? "right" : "left";
+      const xoff = dir === "right" ? "iw" : "-iw";
+      transFilter = `x=${xoff}+${dir}*on*iw/${dur}`;
+    } else if (vid.transitionType === "dissolve") {
+      const transDur = vid.transitionDuration;
+      transFilter = `fade=t=in:st=0:d=${transDur},fade=t=out:st=${dur - transDur}:d=${transDur}`;
+    }
+    
+    const scale = "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:setsar=1";
+    if (transFilter) {
+      filterComplex += `[${i}:v]trim=duration=${dur},setpts=PTS-STARTPTS,${scale},${transFilter}[v${i}]`;
+    } else {
+      filterComplex += `[${i}:v]trim=duration=${dur},setpts=PTS-STARTPTS,${scale}[v${i}]`;
+    }
+    
+    if (i < videos.length - 1) {
+      filterComplex += ";";
+    }
+  }
+  
+  const inputs = videos.map((_, i) => `[v${i}]`).join("");
+  filterComplex += `;${inputs}concat=n=${videos.length}:v=1:a=0`;
+  
+  inputArgs.push("-filter_complex", filterComplex);
+  inputArgs.push("-c:v", "libx264", "-preset", "ultrafast", "-crf", "28");
+  
+  if (audioUrl) {
+    inputArgs.push("-i", join(process.cwd(), audioUrl), "-c:a", "aac", "-b:a", "192k", "-shortest");
+  }
+  
+  inputArgs.push(outputPath);
+  
+  return new Promise((resolve, reject) => {
+    const ffmpeg = spawn("ffmpeg", inputArgs, { stdio: "pipe" });
+    
+    let stderr = "";
+    ffmpeg.stderr.on("data", (data) => {
+      stderr += data.toString();
+    });
+    
+    ffmpeg.on("close", (code) => {
+      if (code === 0) {
+        resolve(outputPath);
+      } else {
+        console.error("FFmpeg stderr:", stderr);
+        reject(new Error(`FFmpeg exited with code ${code}`));
+      }
+    });
+    
+    ffmpeg.on("error", (err) => {
+      reject(err);
+    });
+  });
+}
+
 export async function captureFrame(videoPath: string, timestamp: string = "00:00:01"): Promise<string> {
   const hasFfmpeg = await checkFfmpeg();
   if (!hasFfmpeg) {

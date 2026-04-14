@@ -50,8 +50,10 @@ export async function POST(
     projectId,
     url: sourceImage.url,
     filename: "CONTINUE_FRAME",
-    order: allProjectImages.length,
+    order: allProjectImages.length + 1,
     duration: sourceImage.duration,
+    prompt: sourceImage.prompt,
+    audioUrl: sourceImage.audioUrl,
   }).returning();
   
   return Response.json(newImage);
