@@ -98,6 +98,7 @@ export const videos = pgTable("videos", {
   projectId: integer("project_id")
     .notNull()
     .references(() => projects.id),
+  imageId: integer("image_id"),
   url: text("url").notNull(),
   filename: varchar("filename", { length: 255 }).notNull(),
   order: integer("order").notNull(),

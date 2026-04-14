@@ -9,6 +9,7 @@ import { eq, and, desc } from "drizzle-orm";
 
 import { ImageGrid } from "@/components/project/image-grid";
 import { GeneratePanel } from "@/components/project/generate-panel";
+import { VideoTable } from "@/components/project/video-table";
 
 interface ProjectEditorProps {
   project: {
@@ -29,16 +30,32 @@ interface ProjectEditorProps {
     prompt: string;
     audioUrl: string | null;
   }>;
+  videosList: Array<{
+    id: number;
+    url: string;
+    filename: string;
+    order: number;
+    duration: number;
+    transitionType: string;
+    transitionDuration: number;
+    source: string;
+    imageId: number | null;
+  }>;
 }
 
-export function ProjectEditorClient({ project, imagesList }: ProjectEditorProps) {
+export function ProjectEditorClient({ project, imagesList, videosList }: ProjectEditorProps) {
   const router = useRouter();
   const [images, setImages] = useState(imagesList);
+  const [videos, setVideos] = useState(videosList);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     setImages(imagesList);
   }, [imagesList]);
+
+  useEffect(() => {
+    setVideos(videosList);
+  }, [videosList]);
 
   const saveSettings = async (updates: Partial<{
     name: string;
@@ -59,6 +76,9 @@ export function ProjectEditorClient({ project, imagesList }: ProjectEditorProps)
     const res = await fetch(`/api/projects/${project.id}`);
     const data = await res.json();
     setImages(data.images);
+    if (data.videos) {
+      setVideos(data.videos);
+    }
     router.refresh();
   };
   
@@ -113,6 +133,19 @@ export function ProjectEditorClient({ project, imagesList }: ProjectEditorProps)
               }}
             />
           </div>
+
+          {/* Videos Table */}
+          {videos.length > 0 && (
+            <div>
+              <h2 className="text-xl font-semibold mb-4">Generated Videos</h2>
+              <VideoTable
+                projectId={project.id}
+                videos={videos}
+                images={images}
+                onDelete={(id) => setVideos(videos.filter(v => v.id !== id))}
+              />
+            </div>
+          )}
         </div>
         
         <div className="space-y-8">

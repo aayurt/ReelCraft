@@ -8,3 +8,5 @@ node_modules/*
 uploads
 uploads/
 .next/
+qwen-automate/outputs/
+qwen-automate/auth_states/

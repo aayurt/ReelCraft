@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/auth";
-import { projects, images } from "@/lib/schema";
+import { projects, images, videos } from "@/lib/schema";
 import { and, eq } from "drizzle-orm";
 
 export async function GET(
@@ -31,7 +31,12 @@ export async function GET(
     orderBy: images.order,
   });
   
-  return Response.json({ ...project, images: projectImages });
+  const projectVideos = await db.query.videos.findMany({
+    where: eq(videos.projectId, parseInt(id)),
+    orderBy: videos.order,
+  });
+  
+  return Response.json({ ...project, images: projectImages, videos: projectVideos });
 }
 
 export async function PUT(
