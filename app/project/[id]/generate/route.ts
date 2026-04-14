@@ -4,6 +4,7 @@ import { projects, images, videos, generations } from '@/lib/schema';
 import { eq, and, desc } from 'drizzle-orm';
 import { generateVideo as generateVideoLocal, captureFrame } from '@/lib/video-generator';
 import { generateVideosMixed, RateLimitError } from '@/lib/qwen-video';
+import { generatePrompt, type PromptStyle } from '@/lib/qwen-prompts';
 import { mkdir, unlink, copyFile } from 'fs/promises';
 import { join, dirname } from 'path';
 
@@ -29,7 +30,7 @@ export async function POST(
   }
 
   const body = await request.json();
-  const { frameTransitions = {}, source = 'qwen', frameIds = [] } = body;
+  const { frameTransitions = {}, source = 'qwen', frameIds = [], promptStyle = 'cinematic', customPrompt = '' } = body;
 
   const allImages = await db.query.images.findMany({
     where: eq(images.projectId, projectId),
@@ -83,7 +84,9 @@ export async function POST(
           url: img.url,
           filename: img.filename,
           duration: img.duration,
-          prompt: img.prompt || '',
+          prompt: img.prompt 
+            ? img.prompt 
+            : generatePrompt(promptStyle as PromptStyle, customPrompt),
         })),
         authStatePaths,
         3
