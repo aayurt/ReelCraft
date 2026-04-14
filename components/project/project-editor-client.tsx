@@ -75,10 +75,15 @@ export function ProjectEditorClient({ project, imagesList, videosList }: Project
   const handleUploadComplete = async () => {
     const res = await fetch(`/api/projects/${project.id}`);
     const data = await res.json();
-    setImages(data.images);
-    if (data.videos) {
-      setVideos(data.videos);
-    }
+    setImages(data.images || []);
+    setVideos(data.videos || []);
+    router.refresh();
+  };
+  
+  const handleGenerateComplete = async () => {
+    const res = await fetch(`/api/projects/${project.id}`);
+    const data = await res.json();
+    setVideos(data.videos || []);
     router.refresh();
   };
   
@@ -177,7 +182,7 @@ export function ProjectEditorClient({ project, imagesList, videosList }: Project
             <GeneratePanel
               projectId={project.id}
               images={images}
-              onComplete={handleUploadComplete}
+              onComplete={handleGenerateComplete}
             />
             <a
               href={`/project/${project.id}/videos`}

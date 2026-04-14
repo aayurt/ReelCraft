@@ -110,10 +110,15 @@ export async function DELETE(
   if (!session) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
+
+  const projectIdNum = parseInt(id);
+
+  await db.delete(videos).where(eq(videos.projectId, projectIdNum));
+  await db.delete(images).where(eq(images.projectId, projectIdNum));
   
   const [deleted] = await db.delete(projects)
     .where(and(
-      eq(projects.id, parseInt(id)),
+      eq(projects.id, projectIdNum),
       eq(projects.userId, session.user.id)
     ))
     .returning();

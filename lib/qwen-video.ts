@@ -46,7 +46,7 @@ async function captureFrame(videoPath: string, timestamp: string = "00:00:01"): 
 
 async function checkQwenAutomate(): Promise<boolean> {
   try {
-    const scriptPath = join(process.cwd(), 'qwen-automate', 'qwen_automate.js');
+    const scriptPath = join(process.cwd(), 'qwen-automate', 'qwen_automate.cjs');
     await access(scriptPath);
     return true;
   } catch {
@@ -54,7 +54,7 @@ async function checkQwenAutomate(): Promise<boolean> {
   }
 }
 
-export async function generateVideoWithQwen(options: QwenGenerateOptions): Promise<string> {
+export async function generateVideoWithQwen(options: QwenGenerateOptions, maxRetries: number = 5): Promise<string> {
   const { imagePath, prompt, outputName, authStatePath } = options;
   
   const hasAutomate = await checkQwenAutomate();
@@ -62,43 +62,80 @@ export async function generateVideoWithQwen(options: QwenGenerateOptions): Promi
     throw new Error('Qwen automate script not found. Please ensure qwen-automate directory exists.');
   }
 
-  return new Promise((resolve, reject) => {
-    const scriptPath = join(process.cwd(), 'qwen-automate', 'qwen_automate.js');
-    const nodeProcess = spawn('node', [scriptPath, imagePath, prompt, outputName, authStatePath], {
-      stdio: 'pipe',
-      cwd: join(process.cwd(), 'qwen-automate')
-    });
+  const attempt = async (attemptNumber: number): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const scriptPath = join(process.cwd(), 'qwen-automate', 'qwen_automate.cjs');
+      const nodeProcess = spawn('node', [scriptPath, imagePath, prompt, outputName, authStatePath], {
+        stdio: 'pipe',
+        cwd: join(process.cwd(), 'qwen-automate')
+      });
 
-    let stdout = '';
-    let stderr = '';
+      let stdout = '';
+      let stderr = '';
+      let timeout: NodeJS.Timeout;
 
-    nodeProcess.stdout.on('data', (data) => {
-      stdout += data.toString();
-      process.stdout.write(data);
-    });
+      const timeoutMs = 10 * 60 * 1000; // 10 minutes
+      timeout = setTimeout(() => {
+        nodeProcess.kill();
+        reject(new Error(`Qwen generation timed out after ${timeoutMs / 1000 / 60} minutes (attempt ${attemptNumber}/${maxRetries})`));
+      }, timeoutMs);
 
-    nodeProcess.stderr.on('data', (data) => {
-      stderr += data.toString();
-      process.stderr.write(data);
-    });
+      nodeProcess.stdout.on('data', (data) => {
+        stdout += data.toString();
+        process.stdout.write(data);
+      });
 
-    nodeProcess.on('close', (code) => {
-      if (code === 0) {
-        const outputPath = join(process.cwd(), 'qwen-automate', 'outputs', outputName);
-        resolve(outputPath);
-      } else {
-        if (stderr.includes('Rate limit') || stderr.includes('quota exceeded')) {
-          reject(new RateLimitError(`Rate limit hit: ${stderr}`));
+      nodeProcess.stderr.on('data', (data) => {
+        stderr += data.toString();
+        process.stderr.write(data);
+      });
+
+      nodeProcess.on('close', (code) => {
+        clearTimeout(timeout);
+        if (code === 0) {
+          const outputPath = join(process.cwd(), 'qwen-automate', 'outputs', outputName);
+          resolve(outputPath);
         } else {
-          reject(new Error(`Qwen generation failed with code ${code}: ${stderr}`));
+          if (stderr.includes('Rate limit') || stderr.includes('quota exceeded')) {
+            reject(new RateLimitError(`Rate limit hit: ${stderr}`));
+          } else {
+            reject(new Error(`Qwen generation failed with code ${code}: ${stderr}`));
+          }
         }
-      }
-    });
+      });
 
-    nodeProcess.on('error', (err) => {
-      reject(err);
+      nodeProcess.on('error', (err) => {
+        clearTimeout(timeout);
+        reject(err);
+      });
     });
-  });
+  };
+
+  let lastError: Error | null = null;
+  for (let i = 1; i <= maxRetries; i++) {
+    try {
+      console.log(`Qwen generation attempt ${i}/${maxRetries}...`);
+      return await attempt(i);
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      const isTimeout = lastError.message.includes('timed out');
+      const isRateLimit = error instanceof RateLimitError;
+      
+      if (isRateLimit) {
+        throw error;
+      }
+      
+      if (i < maxRetries && isTimeout) {
+        console.log(`Attempt ${i} timed out, retrying in 5 seconds...`);
+        await new Promise(resolve => setTimeout(resolve, 5000));
+      } else if (i < maxRetries) {
+        console.log(`Attempt ${i} failed: ${lastError.message}, retrying in 5 seconds...`);
+        await new Promise(resolve => setTimeout(resolve, 5000));
+      }
+    }
+  }
+  
+  throw lastError || new Error('Qwen generation failed after all retries');
 }
 
 export async function generateVideosSequential(

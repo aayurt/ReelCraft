@@ -29,39 +29,56 @@ export async function POST(
   }
 
   const body = await request.json();
-  const { frameTransitions = {}, source = 'qwen' } = body;
+  const { frameTransitions = {}, source = 'qwen', frameIds = [] } = body;
 
-  const imageList = await db.query.images.findMany({
+  const allImages = await db.query.images.findMany({
     where: eq(images.projectId, projectId),
   });
 
-  if (imageList.length === 0) {
-    return Response.json({ error: 'No images in project' }, { status: 400 });
+  const sortedImages = [...allImages].sort((a, b) => a.order - b.order);
+
+  const imagesToGenerate = frameIds.length > 0
+    ? sortedImages.filter(img => frameIds.includes(img.id))
+    : sortedImages;
+
+  if (imagesToGenerate.length === 0) {
+    return Response.json({ error: 'No images selected for generation' }, { status: 400 });
   }
 
   const outputDir = join(process.cwd(), 'uploads', 'videos', id);
   await mkdir(outputDir, { recursive: true });
 
-  const sortedImages = [...imageList].sort((a, b) => a.order - b.order);
   const generatedVideos = [];
 
   try {
     if (source === 'qwen') {
       const authStateDir = join(process.cwd(), 'qwen-automate', 'auth_states');
       const authStatePaths = [
-        join(authStateDir, 'user1.json'),
-        join(authStateDir, 'user2.json'),
-        join(authStateDir, 'user3.json'),
-        join(authStateDir, 'user4.json'),
-        join(authStateDir, 'user5.json'),
-        join(authStateDir, 'user6.json'),
+        join(authStateDir, 'account1.json'),
+        join(authStateDir, 'account2.json'),
+        join(authStateDir, 'account3.json'),
+        join(authStateDir, 'account4.json'),
+        join(authStateDir, 'account5.json'),
+        join(authStateDir, 'account6.json'),
+        join(authStateDir, 'account7.json'),
+        join(authStateDir, 'account8.json'),
+        join(authStateDir, 'account9.json'),
+        join(authStateDir, 'account10.json'),
+        join(authStateDir, 'account11.json'),
+        join(authStateDir, 'account12.json'),
+        join(authStateDir, 'account13.json'),
+        join(authStateDir, 'account14.json'),
+        join(authStateDir, 'account15.json'),
+        join(authStateDir, 'account16.json'),
+        join(authStateDir, 'account17.json'),
+        join(authStateDir, 'account18.json'),
       ];
 
-      console.log(`Starting Qwen video generation for ${sortedImages.length} frames...`);
-      console.log('Parallel for normal frames (using 6 users), sequential for CONTINUE frames...');
+      console.log(`Starting Qwen video generation for ${imagesToGenerate.length} frames...`);
+      console.log('Parallel for normal frames (using 18 users), sequential for CONTINUE frames...');
 
       const qwenResults = await generateVideosMixed(
-        sortedImages.map((img) => ({
+        imagesToGenerate.map((img) => ({
           id: img.id,
           url: img.url,
           filename: img.filename,
@@ -81,7 +98,7 @@ export async function POST(
 
         await copyFile(sourceVideoPath, destPath);
 
-        const img = sortedImages.find((i) => i.id === result.imageId);
+        const img = imagesToGenerate.find((i) => i.id === result.imageId);
         const transitionType = img ? (frameTransitions[img.id] || project.transitionType) : project.transitionType;
         const transitionDuration = project.transitionDuration;
 
@@ -106,8 +123,8 @@ export async function POST(
 
       return Response.json({ success: true, videos: generatedVideos });
     } else {
-      for (let i = 0; i < sortedImages.length; i++) {
-        const img = sortedImages[i];
+      for (let i = 0; i < imagesToGenerate.length; i++) {
+        const img = imagesToGenerate[i];
         const transitionType = frameTransitions[img.id] || project.transitionType;
         const transitionDuration = project.transitionDuration;
 

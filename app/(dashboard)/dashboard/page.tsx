@@ -4,6 +4,7 @@ import { db } from "@/lib/auth";
 import { projects } from "@/lib/schema";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { DashboardClient } from "@/components/dashboard-client";
 import { redirect } from "next/navigation";
 
 export default async function DashboardPage() {
@@ -44,25 +45,7 @@ export default async function DashboardPage() {
           No projects yet. Create your first project to get started.
         </div>
       ) : (
-        <div className="grid grid-cols-3 gap-4">
-          {userProjects.map((project) => (
-            <Link key={project.id} href={`/project/${project.id}`}>
-              <Card className="cursor-pointer hover:border-primary transition-colors">
-                <CardHeader>
-                  <CardTitle>{project.name}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-muted-foreground">
-                    Status: {project.status}
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    Created: {new Date(project.createdAt).toLocaleDateString()}
-                  </p>
-                </CardContent>
-              </Card>
-            </Link>
-          ))}
-        </div>
+        <DashboardClient projects={userProjects} />
       )}
     </div>
   );

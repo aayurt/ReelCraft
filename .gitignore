@@ -10,3 +10,5 @@ uploads/
 .next/
 qwen-automate/outputs/
 qwen-automate/auth_states/
+qwen-automate/verify/
+qwen-automate/verify/*
