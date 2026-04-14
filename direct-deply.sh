@@ -8,11 +8,11 @@ LOCAL_PATH="/Users/aayurtshrestha/projects/movieGen"
 echo "🚀 Starting deploy..."
 
 
-echo "📄 Copying .env to server..."
-rsync -avz "$LOCAL_PATH/.env" "$SERVER:$REMOTE_PATH/.env"
+# echo "📄 Copying .env to server..."
+# rsync -avz "$LOCAL_PATH/.env" "$SERVER:$REMOTE_PATH/.env"
 
-echo "🤖 Copying qwen-automate folder to server..."
-rsync -avz "$LOCAL_PATH/qwen-automate/" "$SERVER:$REMOTE_PATH/qwen-automate/"
+# echo "🤖 Copying qwen-automate folder to server..."
+# rsync -avz "$LOCAL_PATH/qwen-automate/" "$SERVER:$REMOTE_PATH/qwen-automate/"
 
 # 2️⃣ SSH once to stop API, clean old DB (already synced if needed), and restart safely
 
@@ -40,9 +40,10 @@ ssh $SERVER "bash -c '
   fi
   
   echo \"🛑 Removing old processes...\"
-  pm2 delete ecosystem.config.js || true
+  
   echo \"✅ Starting Reely...\"
-  pm2 start ecosystem.config.js
+  pm2 restart ecosystem.config.js
   pm2 save
   echo \"🎉 Deploy complete!\"
 '"
+# pm2 delete ecosystem.config.js || true

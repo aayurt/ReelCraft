@@ -18,8 +18,9 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    client.getSession().then((session) => {
-      if (session) {
+    client.getSession().then((result) => {
+      const session = (result as any)?.data?.session ?? (result as any)?.session;
+      if (session?.user || session?.userId) {
         router.push("/dashboard");
       }
     });
