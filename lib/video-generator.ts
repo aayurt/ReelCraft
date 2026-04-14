@@ -2,11 +2,18 @@ import { spawn } from "child_process";
 import { mkdir, access, readFile, copyFile, writeFile, unlink } from "fs/promises";
 import { join, dirname } from "path";
 
+interface GenerateFrame {
+  url: string;
+  duration: number;
+  transitionType?: "none" | "fade" | "slide" | "dissolve";
+  transitionDuration?: number;
+}
+
 interface GenerateOptions {
   projectId: number;
-  images: Array<{ url: string; duration: number }>;
-  transitionType: "none" | "fade" | "slide" | "dissolve";
-  transitionDuration: number;
+  images: GenerateFrame[];
+  transitionType?: "none" | "fade" | "slide" | "dissolve";
+  transitionDuration?: number;
   audioUrl: string | null;
   outputPath: string;
 }

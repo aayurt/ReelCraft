@@ -20,7 +20,7 @@ export default function RegisterPage() {
 
   useEffect(() => {
     client.getSession().then((session) => {
-      if (session && session.data) {
+      if (session) {
         router.push("/dashboard");
       }
     });
@@ -32,12 +32,14 @@ export default function RegisterPage() {
     setLoading(true);
 
     try {
-      const res = await client.signUp.email({
+      const { error } = await client.signUp.email({
         email,
         password,
         name,
       });
-      if (res.data) {
+      if (error) {
+        setError(error.message || "Failed to create account");
+      } else {
         router.push("/dashboard");
       }
     } catch (err) {

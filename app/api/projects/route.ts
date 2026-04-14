@@ -6,12 +6,14 @@ export async function GET() {
   const headersList = await import("next/headers").then(h => h.headers());
   const session = await auth.api.getSession({ headers: headersList });
   
-  if (!session || !session.data) {
+  if (!session) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
   
+  const userId = session.user.id;
+  
   const userProjects = await db.query.projects.findMany({
-    where: (p, { eq }) => eq(p.userId, session.data.user.id),
+    where: (p, { eq }) => eq(p.userId, userId),
   });
   
   return Response.json(userProjects);
@@ -21,7 +23,7 @@ export async function POST(request: Request) {
   const headersList = await import("next/headers").then(h => h.headers());
   const session = await auth.api.getSession({ headers: headersList });
   
-  if (!session || !session.data) {
+  if (!session) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
   
@@ -29,7 +31,7 @@ export async function POST(request: Request) {
   const { name, defaultDuration = 5 } = body;
   
   const [project] = await db.insert(projects).values({
-    userId: session.data.user.id,
+    userId: session.user.id,
     name,
     defaultDuration,
     status: "draft",

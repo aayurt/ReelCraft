@@ -19,7 +19,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     client.getSession().then((session) => {
-      if (session && session.data) {
+      if (session) {
         router.push("/dashboard");
       }
     });
@@ -31,11 +31,15 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      await client.signIn.emailPassword({
+      const { error } = await client.signIn.email({
         email,
         password,
       });
-      router.push("/dashboard");
+      if (error) {
+        setError(error.message || "Invalid email or password");
+      } else {
+        router.push("/dashboard");
+      }
     } catch (err) {
       setError("Invalid email or password");
     } finally {

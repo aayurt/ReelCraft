@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/auth";
-import { projects, images, videos } from "@/lib/schema";
+import { projects, images, videos, generations } from "@/lib/schema";
 import { eq, and, desc } from "drizzle-orm";
 import { generateVideo, captureFrame } from "@/lib/video-generator";
 import { mkdir, unlink } from "fs/promises";

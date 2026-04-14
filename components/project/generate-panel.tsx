@@ -30,6 +30,7 @@ export function GeneratePanel({ projectId, images, onComplete }: GeneratePanelPr
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<string | null>(null);
   const [frameTransitions, setFrameTransitions] = useState<Record<number, string>>({});
+  const [transitionDurations, setTransitionDurations] = useState<Record<number, number>>({});
 
   const sorted = [...images].sort((a, b) => a.order - b.order);
 
@@ -37,18 +38,29 @@ export function GeneratePanel({ projectId, images, onComplete }: GeneratePanelPr
     setFrameTransitions((prev) => ({ ...prev, [id]: value }));
   };
 
+  const setTransitionDuration = (id: number, value: number) => {
+    setTransitionDurations((prev) => ({ ...prev, [id]: value }));
+  };
+
   const handleGenerate = async () => {
     setGenerating(true);
     setError(null);
     setResult(null);
 
+    const transitionsWithDuration: Record<string, { type: string; duration: number }> = {};
+    for (const [id, type] of Object.entries(frameTransitions)) {
+      transitionsWithDuration[id] = {
+        type,
+        duration: transitionDurations[Number(id)] || 1,
+      };
+    }
+
     try {
-      const res = await fetch(`/api/projects/${projectId}/generate`, {
+      const res = await fetch(`/project/${projectId}/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          type: "new",
-          frameTransitions,
+          frameTransitions: transitionsWithDuration,
         }),
       });
 
@@ -98,6 +110,18 @@ export function GeneratePanel({ projectId, images, onComplete }: GeneratePanelPr
                   <option key={opt.value} value={opt.value}>{opt.label}</option>
                 ))}
               </select>
+              {(frameTransitions[frame.id] && frameTransitions[frame.id] !== "none") && (
+                <input
+                  type="number"
+                  min="0.5"
+                  max="2"
+                  step="0.5"
+                  value={transitionDurations[frame.id] || 1}
+                  onChange={(e) => setTransitionDuration(frame.id, parseFloat(e.target.value) || 1)}
+                  className="w-14 text-xs bg-background border border-border rounded px-1 py-1 focus:ring-1 focus:ring-primary outline-none"
+                  title="Transition duration"
+                />
+              )}
             </div>
           ))}
         </div>
