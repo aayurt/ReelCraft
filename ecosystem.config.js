@@ -2,22 +2,15 @@ module.exports = {
   apps: [
     {
       name: 'reely',
-      script: '.next/standalone/server.js',
+      script: 'npm', // 🟢 Use npm as the runner
+      args: 'start', // 🟢 Pass 'start' as the script argument
       instances: 'max',
       exec_mode: 'cluster',
-
-      // 🟢 SAFETY 1: Restart process if it exceeds a limit (e.g., 1GB)
-      // This is a "hard reset" to clear memory leaks.
       max_memory_restart: '1G',
-
-      // 🟢 SAFETY 2: Tell Node/V8 to be aggressive with garbage collection
-      // --max-old-space-size: Sets the limit where Node starts GC heavily.
-      // --gc-interval: Frequency of the garbage collector.
-      node_args: '--max-old-space-size=300',
-
+      node_args: '--max-old-space-size=800',
       env: {
         NODE_ENV: 'production',
-        PORT: 8080,
+        PORT: 3010,
       },
     },
   ],

@@ -7,7 +7,15 @@ LOCAL_PATH="/Users/aayurtshrestha/projects/movieGen"
 
 echo "🚀 Starting deploy..."
 
+
+echo "📄 Copying .env to server..."
+rsync -avz "$LOCAL_PATH/.env" "$SERVER:$REMOTE_PATH/.env"
+
+echo "🤖 Copying qwen-automate folder to server..."
+rsync -avz "$LOCAL_PATH/qwen-automate/" "$SERVER:$REMOTE_PATH/qwen-automate/"
+
 # 2️⃣ SSH once to stop API, clean old DB (already synced if needed), and restart safely
+
 ssh $SERVER "bash -c '
   source ~/.nvm/nvm.sh
   echo \"Git pull\"
