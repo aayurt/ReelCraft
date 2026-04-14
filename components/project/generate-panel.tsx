@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { PROMPT_TEMPLATES, type PromptStyle } from '@/lib/qwen-prompts';
 
 interface Frame {
   id: number;
@@ -36,6 +37,8 @@ export function GeneratePanel({ projectId, images, onComplete }: GeneratePanelPr
   const [transitionDurations, setTransitionDurations] = useState<Record<number, number>>({});
   const [source, setSource] = useState<'qwen' | 'local'>('qwen');
   const [selectedFrames, setSelectedFrames] = useState<Set<number>>(new Set());
+  const [promptStyle, setPromptStyle] = useState<PromptStyle>('cinematic');
+  const [customPrompt, setCustomPrompt] = useState('');
 
   const sorted = [...images].sort((a, b) => a.order - b.order);
 
@@ -100,6 +103,8 @@ export function GeneratePanel({ projectId, images, onComplete }: GeneratePanelPr
           frameTransitions: transitionsWithDuration,
           source,
           frameIds,
+          promptStyle,
+          ...(promptStyle === 'custom' && { customPrompt }),
         }),
       });
 
@@ -192,6 +197,31 @@ export function GeneratePanel({ projectId, images, onComplete }: GeneratePanelPr
           </div>
         </>
       )}
+
+      <div className='bg-secondary/30 rounded-lg p-3 space-y-2'>
+        <p className='text-xs font-semibold text-foreground'>Prompt Style</p>
+        <select
+          value={promptStyle}
+          onChange={(e) => setPromptStyle(e.target.value as PromptStyle)}
+          className='w-full text-xs bg-background border border-border rounded px-2 py-2 focus:ring-1 focus:ring-primary outline-none'
+        >
+          {PROMPT_TEMPLATES.map((t) => (
+            <option key={t.style} value={t.style}>
+              {t.style.charAt(0).toUpperCase() + t.style.slice(1)}
+            </option>
+          ))}
+          <option value='custom'>Custom Prompt</option>
+        </select>
+        {promptStyle === 'custom' && (
+          <input
+            type='text'
+            value={customPrompt}
+            onChange={(e) => setCustomPrompt(e.target.value)}
+            placeholder='Enter custom prompt...'
+            className='w-full text-xs bg-background border border-border rounded px-2 py-2 focus:ring-1 focus:ring-primary outline-none'
+          />
+        )}
+      </div>
 
       <div className='bg-secondary/30 rounded-lg p-3 space-y-2'>
         <p className='text-xs font-semibold text-foreground'>Video Source</p>
