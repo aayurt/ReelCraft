@@ -24,7 +24,7 @@ export default function RegisterPage() {
         router.push("/dashboard");
       }
     });
-  }, [router]);
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
