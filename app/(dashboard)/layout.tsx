@@ -10,7 +10,7 @@ export default function DashboardLayout({
       <header className="border-b">
         <div className="container flex items-center justify-between px-4 py-4">
           <Link href="/dashboard" className="text-xl font-bold">
-            VideoForge
+            Reely
           </Link>
           <nav className="flex gap-4">
             <Link href="/dashboard" className="hover:underline">

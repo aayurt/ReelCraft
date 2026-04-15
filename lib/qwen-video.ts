@@ -96,7 +96,7 @@ export async function generateVideoWithQwen(options: QwenGenerateOptions, maxRet
           const outputPath = join(process.cwd(), 'qwen-automate', 'outputs', outputName);
           resolve(outputPath);
         } else {
-          if (stderr.includes('Rate limit') || stderr.includes('quota exceeded')) {
+          if (stderr.includes('Too many requests') || stderr.includes('Rate limit') || stderr.includes('quota exceeded')) {
             reject(new RateLimitError(`Rate limit hit: ${stderr}`));
           } else {
             reject(new Error(`Qwen generation failed with code ${code}: ${stderr}`));

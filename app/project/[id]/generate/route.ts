@@ -1,12 +1,12 @@
-import { auth } from '@/lib/auth';
-import { db } from '@/lib/auth';
-import { projects, images, videos, generations } from '@/lib/schema';
-import { eq, and, desc } from 'drizzle-orm';
-import { generateVideo as generateVideoLocal, captureFrame } from '@/lib/video-generator';
-import { generateVideosMixed, RateLimitError } from '@/lib/qwen-video';
+import { auth, db } from '@/lib/auth';
 import { generatePrompt, type PromptStyle } from '@/lib/qwen-prompts';
-import { mkdir, unlink, copyFile } from 'fs/promises';
-import { join, dirname } from 'path';
+import { generateVideosMixed, RateLimitError } from '@/lib/qwen-video';
+import { generations, images, projects, videos } from '@/lib/schema';
+import { generateVideo as generateVideoLocal } from '@/lib/video-generator';
+import { and, eq } from 'drizzle-orm';
+import { existsSync } from 'fs';
+import { copyFile, mkdir } from 'fs/promises';
+import { join } from 'path';
 
 export async function POST(
   request: Request,
@@ -84,8 +84,8 @@ export async function POST(
           url: img.url,
           filename: img.filename,
           duration: img.duration,
-          prompt: img.prompt 
-            ? img.prompt 
+          prompt: img.prompt
+            ? img.prompt
             : generatePrompt(promptStyle as PromptStyle, customPrompt),
         })),
         authStatePaths,
@@ -95,35 +95,53 @@ export async function POST(
       console.log(`Generated ${qwenResults.length} videos with Qwen`);
 
       for (const result of qwenResults) {
-        const sourceVideoPath = result.videoPath;
-        const destFilename = `clip_${result.imageId}.mp4`;
-        const destPath = join(outputDir, destFilename);
+        try {
+          const sourceVideoPath = result.videoPath;
+          const destFilename = `clip_${result.imageId}.mp4`;
+          const destPath = join(outputDir, destFilename);
 
-        await copyFile(sourceVideoPath, destPath);
+          console.log(`Copying video from ${sourceVideoPath} to ${destPath}`);
 
-        const img = imagesToGenerate.find((i) => i.id === result.imageId);
-        const transitionType = img ? (frameTransitions[img.id] || project.transitionType) : project.transitionType;
-        const transitionDuration = project.transitionDuration;
+          if (!existsSync(sourceVideoPath)) {
+            throw new Error(`Source video not found: ${sourceVideoPath}`);
+          }
 
-        const existingVideos = await db.query.videos.findMany({
-          where: eq(videos.projectId, projectId),
-        });
+          await copyFile(sourceVideoPath, destPath);
 
-        const [video] = await db.insert(videos).values({
-          projectId,
-          imageId: result.imageId,
-          url: `/uploads/videos/${id}/${destFilename}`,
-          filename: destFilename,
-          order: existingVideos.length + 1,
-          duration: img?.duration || 5,
-          transitionType: transitionType as any,
-          transitionDuration,
-          source: 'qwen',
-        }).returning();
+          if (!existsSync(destPath)) {
+            throw new Error(`Destination video not found after copy: ${destPath}`);
+          }
 
-        generatedVideos.push(video);
+          console.log(`Video copied successfully: ${destFilename}`);
+
+          const img = imagesToGenerate.find((i) => i.id === result.imageId);
+          const transitionType = img ? (frameTransitions[img.id] || project.transitionType) : project.transitionType;
+          const transitionDuration = project.transitionDuration;
+
+          const existingVideos = await db.query.videos.findMany({
+            where: eq(videos.projectId, projectId),
+          });
+
+          const [video] = await db.insert(videos).values({
+            projectId,
+            imageId: result.imageId,
+            url: `/uploads/videos/${id}/${destFilename}`,
+            filename: destFilename,
+            order: existingVideos.length + 1,
+            duration: img?.duration || 5,
+            transitionType: transitionType as any,
+            transitionDuration,
+            source: 'qwen',
+          }).returning();
+
+          console.log(`Video inserted into DB: ${video.id} - ${destFilename}`);
+          generatedVideos.push(video);
+        } catch (videoError) {
+          console.error(`Failed to process video for imageId ${result.imageId}:`, videoError);
+        }
       }
 
+      console.log(`Successfully processed ${generatedVideos.length}/${qwenResults.length} videos`);
       return Response.json({ success: true, videos: generatedVideos });
     } else {
       for (let i = 0; i < imagesToGenerate.length; i++) {

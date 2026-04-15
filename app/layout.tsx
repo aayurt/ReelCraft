@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "VideoForge",
+  title: "Reely | Content creation tool for video makers",
   description: "Content creation tool for video makers",
 };
 

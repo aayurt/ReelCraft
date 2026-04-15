@@ -9,6 +9,32 @@ class RateLimitError extends Error {
   }
 }
 
+class RequestFloodError extends RateLimitError {
+  constructor(message) {
+    super(message);
+    this.name = 'RequestFloodError';
+  }
+}
+
+async function dismissQwenStudioModal(page) {
+  const pageContent = await page.content();
+  if (pageContent.includes('Qwen Studio') || pageContent.includes('Big News')) {
+    console.log('Detecting Qwen Studio modal, attempting to close...');
+    try {
+      const modalCloseBtn = page.locator('.qwen-chat-comp-update-modal-close');
+      if (await modalCloseBtn.isVisible({ timeout: 1000 })) {
+        await modalCloseBtn.click();
+        await page.waitForTimeout(500);
+        console.log('Modal closed successfully');
+        return true;
+      }
+    } catch {}
+    await page.keyboard.press('Escape');
+    return true;
+  }
+  return false;
+}
+
 const AUTH_STATES_DIR = path.join(__dirname, 'auth_states');
 const ACCOUNT_STATE_FILE = path.join(AUTH_STATES_DIR, '.accountState.json');
 
@@ -169,6 +195,7 @@ async function generateVideoFromImage(imagePath, prompt, outputName, authStatePa
     // Check for rate limit or usage limit messages immediately after sending
     await page.waitForTimeout(2000);
     const limitMessages = [
+      'Too many requests in a short period',
       'reached the daily usage limit',
       'Rate limit reached',
       'Usage exceeded',
@@ -179,7 +206,8 @@ async function generateVideoFromImage(imagePath, prompt, outputName, authStatePa
     for (const msg of limitMessages) {
       if (pageContent1.includes(msg)) {
         console.log(`Rate limit detected: "${msg}"`);
-        throw new RateLimitError(`Rate limit hit: ${msg}`);
+        const isRequestFlood = msg === 'Too many requests in a short period';
+        throw (isRequestFlood ? new RequestFloodError(`Request flood hit: ${msg}`) : new RateLimitError(`Rate limit hit: ${msg}`));
       }
     }
 
@@ -223,7 +251,10 @@ async function generateVideoFromImage(imagePath, prompt, outputName, authStatePa
       const elapsed = Math.floor((Date.now() - startTime) / 1000);
       if (elapsed % 60 === 0) console.log(`Still waiting... ${elapsed}s elapsed.`);
 
+      await dismissQwenStudioModal(page);
+
       const limitMessages = [
+        'Too many requests in a short period',
         'You have reached the daily usage limit',
         'reached the daily usage limit',
         'Rate limit reached',
@@ -235,10 +266,11 @@ async function generateVideoFromImage(imagePath, prompt, outputName, authStatePa
         if (checkContent.includes(msg)) {
           console.log(`Rate limit detected during generation: "${msg}"`);
           await browser.close();
+          const isRequestFlood = msg === 'Too many requests in a short period';
           if (onRateLimit) {
-            return await onRateLimit();
+            return await onRateLimit(isRequestFlood);
           }
-          throw new RateLimitError(`Rate limit hit: ${msg}`);
+          throw (isRequestFlood ? new RequestFloodError(`Request flood hit: ${msg}`) : new RateLimitError(`Rate limit hit: ${msg}`));
         }
       }
     }
@@ -246,6 +278,8 @@ async function generateVideoFromImage(imagePath, prompt, outputName, authStatePa
     if (!downloadLink) {
       throw new Error('Video generation timed out or specific Qwen download button not found.');
     }
+
+    await dismissQwenStudioModal(page);
 
     console.log('Attempting download from Qwen modal...');
     const [download] = await Promise.all([
@@ -284,7 +318,8 @@ async function generateVideoFromImage(imagePath, prompt, outputName, authStatePa
 
 // Example usage if run directly
 if (require.main === module) {
-  const args = process.argv.slice(2);
+  (async () => {
+    const args = process.argv.slice(2);
 
   if (args[0] === '--reset') {
     resetAccountState();
@@ -327,7 +362,12 @@ if (require.main === module) {
     process.exit(1);
   }
 
-  async function retryWithNextAccount(attemptAuth, attemptImage, attemptPrompt, attemptOutput, retriesLeft) {
+  async function retryWithNextAccount(attemptAuth, attemptImage, attemptPrompt, attemptOutput, retriesLeft, isRequestFlood = false) {
+    if (isRequestFlood) {
+      console.log('Request flood detected. Waiting 2 minutes before retry...');
+      await new Promise(resolve => setTimeout(resolve, 120000));
+    }
+
     if (retriesLeft <= 0) {
       console.error('No more accounts to retry.');
       process.exit(1);
@@ -335,21 +375,23 @@ if (require.main === module) {
     const nextAuth = getNextAccountPath();
     console.log(`Retrying with ${path.basename(nextAuth)}... (${retriesLeft} retries left)`);
     try {
-      return await generateVideoFromImage(attemptImage, attemptPrompt, attemptOutput, nextAuth, () => retryWithNextAccount(attemptAuth, attemptImage, attemptPrompt, attemptOutput, retriesLeft - 1));
+      return await generateVideoFromImage(attemptImage, attemptPrompt, attemptOutput, nextAuth, (flood) => retryWithNextAccount(attemptAuth, attemptImage, attemptPrompt, attemptOutput, retriesLeft - 1, flood));
     } catch (err) {
       if (err instanceof RateLimitError) {
-        return retryWithNextAccount(attemptAuth, attemptImage, attemptPrompt, attemptOutput, retriesLeft - 1);
+        const isFlood = err instanceof RequestFloodError;
+        return retryWithNextAccount(attemptAuth, attemptImage, attemptPrompt, attemptOutput, retriesLeft - 1, isFlood);
       }
       throw err;
     }
   }
 
   try {
-    await generateVideoFromImage(img, p, out, auth, () => retryWithNextAccount(auth, img, p, out, 7));
+    await generateVideoFromImage(img, p, out, auth, (isRequestFlood) => retryWithNextAccount(auth, img, p, out, 7, isRequestFlood));
   } catch (err) {
     console.error(err);
     process.exit(1);
   }
+  })();
 }
 
-module.exports = { generateVideoFromImage, RateLimitError, getNextAccountPath, getAccountPathByNumber, discoverAccounts, resetAccountState };
+module.exports = { generateVideoFromImage, RateLimitError, RequestFloodError, getNextAccountPath, getAccountPathByNumber, discoverAccounts, resetAccountState };

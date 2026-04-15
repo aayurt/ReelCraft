@@ -9,6 +9,32 @@ class RateLimitError extends Error {
   }
 }
 
+class RequestFloodError extends RateLimitError {
+  constructor(message) {
+    super(message);
+    this.name = 'RequestFloodError';
+  }
+}
+
+async function dismissQwenStudioModal(page) {
+  const pageContent = await page.content();
+  if (pageContent.includes('Qwen Studio') || pageContent.includes('Big News')) {
+    console.log('Detecting Qwen Studio modal, attempting to close...');
+    try {
+      const modalCloseBtn = page.locator('.qwen-chat-comp-update-modal-close');
+      if (await modalCloseBtn.isVisible({ timeout: 1000 })) {
+        await modalCloseBtn.click();
+        await page.waitForTimeout(500);
+        console.log('Modal closed successfully');
+        return true;
+      }
+    } catch {}
+    await page.keyboard.press('Escape');
+    return true;
+  }
+  return false;
+}
+
 const AUTH_STATES_DIR = path.join(__dirname, 'auth_states');
 const ACCOUNT_STATE_FILE = path.join(AUTH_STATES_DIR, '.accountState.json');
 
@@ -75,7 +101,7 @@ async function generateVideoFromImage(imagePath, prompt, outputName, authStatePa
     throw new Error(`Auth state file not found: ${authStatePath}`);
   }
 
-  const browser = await chromium.launch({ headless: true });
+  const browser = await chromium.launch({ headless: false });
   const context = await browser.newContext({
     storageState: authStatePath, viewport: { width: 1280, height: 720 },
     screen: { width: 1280, height: 720 },
@@ -151,6 +177,7 @@ async function generateVideoFromImage(imagePath, prompt, outputName, authStatePa
 
     await page.waitForTimeout(2000);
     const limitMessages = [
+      'Too many requests in a short period',
       'You have reached the daily usage limit',
       'reached the daily usage limit',
       'Rate limit reached',
@@ -163,10 +190,11 @@ async function generateVideoFromImage(imagePath, prompt, outputName, authStatePa
       if (pageContent1.includes(msg)) {
         console.log(`Rate limit detected: "${msg}"`);
         await browser.close();
+        const isRequestFlood = msg === 'Too many requests in a short period';
         if (onRateLimit) {
-          return await onRateLimit();
+          return await onRateLimit(isRequestFlood);
         }
-        throw new RateLimitError(`Rate limit hit: ${msg}`);
+        throw (isRequestFlood ? new RequestFloodError(`Request flood hit: ${msg}`) : new RateLimitError(`Rate limit hit: ${msg}`));
       }
     }
 
@@ -224,7 +252,10 @@ async function generateVideoFromImage(imagePath, prompt, outputName, authStatePa
       const elapsed = Math.floor((Date.now() - startTime) / 1000);
       if (elapsed % 60 === 0) console.log(`Still waiting... ${elapsed}s elapsed.`);
 
+      await dismissQwenStudioModal(page);
+
       const checkLimitMessages = [
+        'Too many requests in a short period',
         'You have reached the daily usage limit',
         'reached the daily usage limit',
         'Rate limit reached',
@@ -236,39 +267,60 @@ async function generateVideoFromImage(imagePath, prompt, outputName, authStatePa
         if (checkContent.includes(msg)) {
           console.log(`Rate limit detected during generation: "${msg}"`);
           await browser.close();
+          const isRequestFlood = msg === 'Too many requests in a short period';
           if (onRateLimit) {
-            return await onRateLimit();
+            return await onRateLimit(isRequestFlood);
           }
-          throw new RateLimitError(`Rate limit hit: ${msg}`);
+          throw (isRequestFlood ? new RequestFloodError(`Request flood hit: ${msg}`) : new RateLimitError(`Rate limit hit: ${msg}`));
         }
       }
     }
 
-    const modelContent = await page.content();
-    if (modelContent.includes('Qwen Studio') || modelContent.includes('Big News')) {
-      console.log('Detected Qwen Studio modal, attempting to close...');
-      try {
-        const modalCloseBtn = page.locator('.qwen-chat-comp-update-modal-close');
-        if (await modalCloseBtn.isVisible({ timeout: 3000 })) {
-          await modalCloseBtn.click();
-          await page.waitForTimeout(1000);
-          console.log('Modal closed successfully');
-        }
-      } catch {
-        await page.keyboard.press('Escape');
-        await page.waitForTimeout(500);
-      }
-    }
+    console.log('Checking for Qwen modal...');
+
+    // Always attempt to close modal (no brittle content check)
+    await page.locator('.qwen-chat-comp-update-modal-close')
+      .first()
+      .click({ timeout: 5000 })
+      .catch(() => {
+        console.log('No modal close button found or already closed');
+      });
+
+    // Small buffer to ensure UI is ready
+    await page.waitForTimeout(1000);
 
     if (!downloadLink) {
-      throw new Error('Video generation timed out or specific Qwen download button not found.');
+      throw new Error('Download button not defined');
     }
 
-    console.log('Attempting download from Qwen modal...');
-    const [download] = await Promise.all([
-      page.waitForEvent('download'),
-      downloadLink.click()
-    ]);
+    console.log('Waiting for download button...');
+    await downloadLink.waitFor({ state: 'visible', timeout: 15000 });
+
+    console.log('Attempting download...');
+
+    let download;
+
+    try {
+      [download] = await Promise.all([
+        page.waitForEvent('download', { timeout: 15000 }),
+        downloadLink.click()
+      ]);
+
+      console.log('Download triggered successfully');
+
+    } catch (err) {
+      console.log('Download event not triggered, trying fallback...');
+
+      // fallback: maybe it's not a real "download" event
+      await downloadLink.click();
+
+      // optional: wait to observe what happens
+      await page.waitForTimeout(5000);
+    }
+
+    if (!download) {
+      throw new Error('Download failed or did not trigger a browser download event.');
+    }
 
     const closeBtn = page.locator('div.qwen-video-viewer-content-close');
     if (await closeBtn.isVisible()) {
@@ -342,7 +394,12 @@ if (require.main === module) {
       process.exit(1);
     }
 
-    async function retryWithNextAccount(attemptImage, attemptPrompt, attemptOutput, retriesLeft) {
+    async function retryWithNextAccount(attemptImage, attemptPrompt, attemptOutput, retriesLeft, isRequestFlood = false) {
+      if (isRequestFlood) {
+        console.log('Request flood detected. Waiting 2 minutes before retry...');
+        await new Promise(resolve => setTimeout(resolve, 120000));
+      }
+
       if (retriesLeft <= 0) {
         console.error('No more accounts to retry.');
         process.exit(1);
@@ -350,17 +407,18 @@ if (require.main === module) {
       const nextAuth = getNextAccountPath();
       console.log(`Retrying with ${path.basename(nextAuth)}... (${retriesLeft} retries left)`);
       try {
-        return await generateVideoFromImage(attemptImage, attemptPrompt, attemptOutput, nextAuth, () => retryWithNextAccount(attemptImage, attemptPrompt, attemptOutput, retriesLeft - 1));
+        return await generateVideoFromImage(attemptImage, attemptPrompt, attemptOutput, nextAuth, (flood) => retryWithNextAccount(attemptImage, attemptPrompt, attemptOutput, retriesLeft - 1, flood));
       } catch (err) {
         if (err instanceof RateLimitError) {
-          return retryWithNextAccount(attemptImage, attemptPrompt, attemptOutput, retriesLeft - 1);
+          const isFlood = err instanceof RequestFloodError;
+          return retryWithNextAccount(attemptImage, attemptPrompt, attemptOutput, retriesLeft - 1, isFlood);
         }
         throw err;
       }
     }
 
     try {
-      await generateVideoFromImage(img, p, out, auth, () => retryWithNextAccount(img, p, out, 7));
+      await generateVideoFromImage(img, p, out, auth, (isRequestFlood) => retryWithNextAccount(img, p, out, 7, isRequestFlood));
     } catch (err) {
       console.error(err);
       process.exit(1);
@@ -368,4 +426,4 @@ if (require.main === module) {
   })();
 }
 
-module.exports = { generateVideoFromImage, RateLimitError, getNextAccountPath, getAccountPathByNumber, discoverAccounts, resetAccountState };
+module.exports = { generateVideoFromImage, RateLimitError, RequestFloodError, getNextAccountPath, getAccountPathByNumber, discoverAccounts, resetAccountState };
