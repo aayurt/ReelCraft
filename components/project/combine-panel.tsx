@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 interface VideoClip {
@@ -12,6 +12,13 @@ interface VideoClip {
   transitionType: string;
   transitionDuration: number;
   source: string;
+}
+
+interface CombinedVideo {
+  id: number;
+  url: string;
+  filename: string;
+  createdAt: string;
 }
 
 interface CombinePanelProps {
@@ -44,12 +51,20 @@ export function CombinePanel({
   const router = useRouter();
   const [combining, setCombining] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<string | null>(null);
+  const [combinedVideos, setCombinedVideos] = useState<CombinedVideo[]>([]);
+
+  useEffect(() => {
+    fetch(`/api/projects/${projectId}/combine`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.videos) setCombinedVideos(data.videos);
+      })
+      .catch(console.error);
+  }, [projectId]);
 
   const handleCombine = async () => {
     setCombining(true);
     setError(null);
-    setResult(null);
 
     try {
       const sortedVideos = [...videos].sort((a, b) => a.order - b.order);
@@ -71,8 +86,8 @@ export function CombinePanel({
 
       const data = await res.json();
 
-      if (data.success || data.outputUrl) {
-        setResult(data.outputUrl);
+      if (data.success && data.video) {
+        setCombinedVideos(prev => [data.video, ...prev]);
       } else {
         setError(data.error || "Combine failed");
       }
@@ -169,17 +184,29 @@ export function CombinePanel({
       </button>
 
       {error && <div className="text-sm text-destructive bg-destructive/10 rounded px-3 py-2">{error}</div>}
-      {result && (
+      {combinedVideos.length > 0 && (
         <div className="space-y-2">
-          <p className="text-sm text-green-500 bg-green-500/10 rounded px-3 py-2">Videos combined successfully!</p>
-          <a
-            href={result}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="block text-center text-xs text-primary underline underline-offset-2"
-          >
-            Download Final Video
-          </a>
+          <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Combined Videos</p>
+          <div className="space-y-2">
+            {combinedVideos.map((video) => (
+              <div key={video.id} className="flex items-center justify-between bg-muted/50 rounded p-2">
+                <video src={video.url} controls className="h-16 w-auto rounded" />
+                <div className="flex flex-col items-end gap-1">
+                  <span className="text-xs text-muted-foreground">
+                    {new Date(video.createdAt).toLocaleString()}
+                  </span>
+                  <a
+                    href={video.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-primary hover:underline"
+                  >
+                    View / Download
+                  </a>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>
