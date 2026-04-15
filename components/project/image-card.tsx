@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
+import { Check } from "lucide-react";
 
 interface ImageCardProps {
   image: {
@@ -14,12 +15,22 @@ interface ImageCardProps {
     audioUrl: string | null;
   };
   status?: 'pending' | 'completed' | 'next' | 'uploaded';
+  selected?: boolean;
+  onToggleSelect?: () => void;
   onClick: () => void;
   onUpdate: (id: number, updates: Partial<{ order: number; duration: number; prompt: string; audioUrl: string | null }>) => void;
   onDelete: (id: number) => void;
 }
 
-export function ImageCard({ image, status = 'pending', onClick, onUpdate, onDelete }: ImageCardProps) {
+export function ImageCard({ 
+  image, 
+  status = 'pending', 
+  selected = false,
+  onToggleSelect,
+  onClick, 
+  onUpdate, 
+  onDelete 
+}: ImageCardProps) {
   const [duration, setDuration] = useState(image.duration);
   const [order, setOrder] = useState(image.order);
 
@@ -41,15 +52,40 @@ export function ImageCard({ image, status = 'pending', onClick, onUpdate, onDele
   return (
     <div className={cn(
       "relative group rounded-lg transition-all duration-300 p-0.5",
-      status === 'completed'
-        ? "border-2 border-yellow-400 shadow-[0_0_15px_rgba(245,158,11,0.25)]"
-        : status === 'next'
-          ? "border-2 border-blue-800 shadow-[0_0_10px_rgba(34,197,94,0.2)]"
-          : status === 'uploaded'
-            ? "border-2  border-green-500 shadow-[0_0_10px_rgba(250,204,21,0.15)]"
-            : "border-2 border-blue-300 opacity-80"
+      selected
+        ? "border-2 border-primary shadow-[0_0_15px_rgba(var(--primary),0.25)]"
+        : status === 'completed'
+          ? "border-2 border-yellow-400 shadow-[0_0_15px_rgba(245,158,11,0.25)]"
+          : status === 'next'
+            ? "border-2 border-blue-800 shadow-[0_0_10px_rgba(34,197,94,0.2)]"
+            : status === 'uploaded'
+              ? "border-2  border-green-500 shadow-[0_0_10px_rgba(250,204,21,0.15)]"
+              : "border-2 border-blue-300 opacity-80"
     )}>
       <div className="relative overflow-hidden rounded-md">
+        {/* Selection Checkbox */}
+        <div 
+          className="absolute top-2 left-2 z-20"
+          onClick={(e) => {
+            e.stopPropagation();
+          }}
+        >
+          <div 
+            className={cn(
+              "w-5 h-5 rounded-md border-2 transition-all flex items-center justify-center cursor-pointer",
+              selected 
+                ? "bg-primary border-primary shadow-lg" 
+                : "bg-black/20 border-white/50 backdrop-blur-sm group-hover:border-white opacity-0 group-hover:opacity-100"
+            )}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleSelect?.();
+            }}
+          >
+            {selected && <Check className="w-3.5 h-3.5 text-primary-foreground" strokeWidth={3} />}
+          </div>
+        </div>
+
         <img
           src={image.url}
           alt={image.filename}

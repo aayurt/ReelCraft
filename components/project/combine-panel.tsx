@@ -27,6 +27,8 @@ interface CombinePanelProps {
   transitionDuration: number;
   audioUrl: string | null;
   videos: VideoClip[];
+  selectedImageIds?: number[];
+  selectedVideoIds?: number[];
   onSettingsChange: (updates: Partial<{
     transitionType: string;
     transitionDuration: number;
@@ -46,12 +48,20 @@ export function CombinePanel({
   transitionDuration,
   audioUrl,
   videos,
+  selectedImageIds,
+  selectedVideoIds,
   onSettingsChange,
 }: CombinePanelProps) {
   const router = useRouter();
   const [combining, setCombining] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [combinedVideos, setCombinedVideos] = useState<CombinedVideo[]>([]);
+
+  const selectedVideos = videos.filter(v => {
+    if (selectedVideoIds) return selectedVideoIds.includes(v.id);
+    if (selectedImageIds) return v.imageId && selectedImageIds.includes(v.imageId);
+    return true;
+  });
 
   useEffect(() => {
     fetch(`/api/projects/${projectId}/combine`)
@@ -67,13 +77,19 @@ export function CombinePanel({
     setError(null);
 
     try {
-      const sortedVideos = [...videos].sort((a, b) => a.order - b.order);
+      const sortedVideos = [...selectedVideos].sort((a, b) => a.order - b.order);
       const videoClips = sortedVideos.map(v => ({
         url: v.url,
         duration: v.duration,
         transitionType: v.transitionType === "none" ? "none" : (v.transitionType || transitionType),
         transitionDuration: v.transitionDuration || transitionDuration,
       }));
+
+      if (videoClips.length === 0) {
+        setError("Please select at least one frame with a generated video.");
+        setCombining(false);
+        return;
+      }
 
       const res = await fetch(`/api/projects/${projectId}/combine`, {
         method: "POST",
@@ -177,10 +193,12 @@ export function CombinePanel({
 
       <button
         onClick={handleCombine}
-        disabled={combining}
+        disabled={combining || selectedVideos.length === 0}
         className="w-full bg-secondary text-secondary-foreground hover:bg-secondary/80 border border-border px-4 py-2.5 rounded-md font-medium disabled:opacity-50 transition-colors text-sm"
       >
-        {combining ? "Combining..." : "Combine into Final Video"}
+        {combining 
+          ? "Combining..." 
+          : `Combine ${selectedVideos.length > 0 ? selectedVideos.length : 'all'} selected clips`}
       </button>
 
       {error && <div className="text-sm text-destructive bg-destructive/10 rounded px-3 py-2">{error}</div>}

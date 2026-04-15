@@ -10,6 +10,7 @@ import { eq, and, desc } from "drizzle-orm";
 import { ImageGrid } from "@/components/project/image-grid";
 import { GeneratePanel } from "@/components/project/generate-panel";
 import { VideoTable } from "@/components/project/video-table";
+import { CombinePanel } from "@/components/project/combine-panel";
 
 interface ProjectEditorProps {
   project: {
@@ -48,6 +49,21 @@ export function ProjectEditorClient({ project, imagesList, videosList }: Project
   const [images, setImages] = useState(imagesList);
   const [videos, setVideos] = useState(videosList);
   const [saving, setSaving] = useState(false);
+  const [selectedImageIds, setSelectedImageIds] = useState<number[]>([]);
+
+  const handleToggleSelect = (id: number) => {
+    setSelectedImageIds(prev =>
+      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    );
+  };
+
+  const handleSelectAll = () => {
+    setSelectedImageIds(images.map(img => img.id));
+  };
+
+  const handleClearSelection = () => {
+    setSelectedImageIds([]);
+  };
 
   useEffect(() => {
     setImages(imagesList);
@@ -111,11 +127,24 @@ export function ProjectEditorClient({ project, imagesList, videosList }: Project
         <div className="col-span-2 space-y-8">
           <div>
             <h2 className="text-xl font-semibold mb-4">Storyboard</h2>
+            <CombinePanel
+              projectId={project.id}
+              transitionType={project.transitionType}
+              transitionDuration={project.transitionDuration}
+              audioUrl={project.audioUrl}
+              videos={videos}
+              selectedImageIds={selectedImageIds}
+              onSettingsChange={saveSettings}
+            />
             <ImageGrid
               projectId={project.id}
               onUploadComplete={handleUploadComplete}
               images={images}
               videos={videos}
+              selectedImageIds={selectedImageIds}
+              onToggleSelect={handleToggleSelect}
+              onSelectAll={handleSelectAll}
+              onClearSelection={handleClearSelection}
               onReorder={async (newImages) => {
                 setImages(newImages);
                 await fetch(`/api/projects/${project.id}/images/reorder`, {

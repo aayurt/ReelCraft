@@ -114,9 +114,8 @@ export async function generateVideo(options: GenerateOptions): Promise<string> {
       if (transitionType === "fade") {
         transFilter = `fade=t=in:st=0:d=${transDur},fade=t=out:st=${parseFloat(td) - transDur}:d=${transDur}`;
       } else if (transitionType === "slide") {
-        const dir = i % 2 === 0 ? "right" : "left";
-        const xoff = dir === "right" ? "iw" : "-iw";
-        transFilter = `x=${xoff}+${dir}*on*iw/${images[i].duration / 1000}`;
+        // Slide filter syntax was invalid (x=...), using fade as a stable fallback
+        transFilter = `fade=t=in:st=0:d=${transDur},fade=t=out:st=${parseFloat(td) - transDur}:d=${transDur}`;
       } else if (transitionType === "dissolve") {
         transFilter = `fade=t=in:st=0:d=${transDur},fade=t=out:st=${parseFloat(td) - transDur}:d=${transDur}`;
       }
@@ -135,6 +134,9 @@ export async function generateVideo(options: GenerateOptions): Promise<string> {
   if (audioUrl) {
     const audioPath = join(process.cwd(), audioUrl);
     args.push("-i", audioPath, "-c:a", "aac", "-b:a", "192k", "-shortest");
+  } else {
+    // Always include a silent audio stream to prevent concatenation issues later
+    args.push("-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=44100", "-c:a", "aac", "-shortest");
   }
 
   args.push(outputPath);
@@ -199,9 +201,9 @@ export async function combineVideos(options: {
       const transDur = vid.transitionDuration;
       transFilter = `fade=t=in:st=0:d=${transDur},fade=t=out:st=${dur - transDur}:d=${transDur}`;
     } else if (vid.transitionType === "slide") {
-      const dir = i % 2 === 0 ? "right" : "left";
-      const xoff = dir === "right" ? "iw" : "-iw";
-      transFilter = `x=${xoff}+${dir}*on*iw/${dur}`;
+      // Corrected slide logic to use fade fallback until a stable scroll filter is implemented
+      const transDur = vid.transitionDuration;
+      transFilter = `fade=t=in:st=0:d=${transDur},fade=t=out:st=${dur - transDur}:d=${transDur}`;
     } else if (vid.transitionType === "dissolve") {
       const transDur = vid.transitionDuration;
       transFilter = `fade=t=in:st=0:d=${transDur},fade=t=out:st=${dur - transDur}:d=${transDur}`;
@@ -210,25 +212,36 @@ export async function combineVideos(options: {
     const scale = "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,setsar=1";
     // const scale = "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:setsar=1";
     if (transFilter) {
-      filterComplex += `[${i}:v]trim=duration=${dur},setpts=PTS-STARTPTS,${scale},${transFilter}[v${i}]`;
+      filterComplex += `[${i}:v]trim=duration=${dur},setpts=PTS-STARTPTS,${scale},${transFilter}[v${i}];`;
     } else {
-      filterComplex += `[${i}:v]trim=duration=${dur},setpts=PTS-STARTPTS,${scale}[v${i}]`;
+      filterComplex += `[${i}:v]trim=duration=${dur},setpts=PTS-STARTPTS,${scale}[v${i}];`;
     }
+
+    // Map audio from each clip if it exists (interleaved v0, a0, v1, a1...)
+    filterComplex += `[${i}:a]atrim=duration=${dur},asetpts=PTS-STARTPTS[a${i}]`;
 
     if (i < videos.length - 1) {
       filterComplex += ";";
     }
   }
 
-  const inputs = videos.map((_, i) => `[v${i}]`).join("");
-  filterComplex += `;${inputs}concat=n=${videos.length}:v=1:a=0`;
-
-  inputArgs.push("-filter_complex", filterComplex);
-  inputArgs.push("-c:v", "libx264", "-preset", "ultrafast", "-crf", "28");
+  const interleavedInputs = videos.map((_, i) => `[v${i}][a${i}]`).join("");
+  filterComplex += `;${interleavedInputs}concat=n=${videos.length}:v=1:a=1[vout][a_concat]`;
 
   if (audioUrl) {
-    inputArgs.push("-i", join(process.cwd(), audioUrl), "-c:a", "aac", "-b:a", "192k", "-shortest");
+    const bgAudioIndex = videos.length;
+    inputArgs.push("-i", join(process.cwd(), audioUrl));
+    filterComplex += `;[a_concat][${bgAudioIndex}:a]amix=inputs=2:duration=first:dropout_transition=2[aout]`;
+  } else {
+    filterComplex += ";[a_concat]anullsrc=channel_layout=stereo:sample_rate=44100[asilence];[a_concat][asilence]amix=inputs=1:duration=first[aout]";
+    // Simplified: if no bg audio, just use concatenated audio
+    filterComplex = filterComplex.replace(";[a_concat]anullsrc=channel_layout=stereo:sample_rate=44100[asilence];[a_concat][asilence]amix=inputs=1:duration=first[aout]", ";[a_concat]acopy[aout]");
   }
+
+  inputArgs.push("-filter_complex", filterComplex);
+  inputArgs.push("-map", "[vout]", "-map", "[aout]");
+  inputArgs.push("-c:v", "libx264", "-preset", "ultrafast", "-crf", "28");
+  inputArgs.push("-c:a", "aac", "-b:a", "192k", "-shortest");
 
   inputArgs.push(outputPath);
 

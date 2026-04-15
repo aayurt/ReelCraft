@@ -193,7 +193,12 @@ export async function POST(
           }).returning();
 
           generatedVideos.push(video);
-      console.log(`Successfully processed ${generatedVideos.length}/${qwenResults.length} videos`);
+        } catch (procErr) {
+          console.error(`[Processing] Error processing result for image ${result.imageId}:`, procErr);
+        }
+      }
+
+      console.log(`Successfully processed ${generatedVideos.length}/${results.length} videos`);
       return Response.json({ success: true, videos: generatedVideos });
     } else {
       for (let i = 0; i < imagesToGenerate.length; i++) {

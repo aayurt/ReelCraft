@@ -1,9 +1,10 @@
 "use client";
 
+import { CheckSquare, X } from "lucide-react";
 import { useState } from "react";
-import { ImageCard } from "./image-card";
 import { FrameModal } from "./frame-modal";
 import { FramePromptList } from "./frame-prompt-list";
+import { ImageCard } from "./image-card";
 
 interface Image {
   id: number;
@@ -24,6 +25,10 @@ interface ImageGridProps {
   projectId: number;
   images: Image[];
   videos: Video[];
+  selectedImageIds: number[];
+  onToggleSelect: (id: number) => void;
+  onSelectAll: () => void;
+  onClearSelection: () => void;
   onReorder: (images: Image[]) => void;
   onUpdate: (id: number, updates: Partial<Image>) => void;
   onDelete: (id: number) => void;
@@ -36,11 +41,23 @@ function getOrdinal(n: number) {
   return n + (s[(v - 20) % 10] || s[v] || s[0]);
 }
 
-export function ImageGrid({ projectId, images, videos, onReorder, onUpdate, onDelete, onUploadComplete }: ImageGridProps) {
+export function ImageGrid({
+  projectId,
+  images,
+  videos,
+  selectedImageIds,
+  onToggleSelect,
+  onSelectAll,
+  onClearSelection,
+  onReorder,
+  onUpdate,
+  onDelete,
+  onUploadComplete
+}: ImageGridProps) {
   const [draggedId, setDraggedId] = useState<number | null>(null);
   const [uploading, setUploading] = useState(false);
   const [selectedImage, setSelectedImage] = useState<typeof images[number] | null>(null);
-  console.log({ images })
+
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files?.[0]) return;
     setUploading(true);
@@ -106,7 +123,29 @@ export function ImageGrid({ projectId, images, videos, onReorder, onUpdate, onDe
   const sorted = [...images].sort((a, b) => a.order - b.order);
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
+      <div className="flex items-center justify-between bg-muted/30 p-3 rounded-lg border border-border">
+        <div className="flex items-center gap-4">
+          <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+            {selectedImageIds.length} frames selected
+          </span>
+          <div className="flex gap-2">
+            <button
+              onClick={onSelectAll}
+              className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest px-2.5 py-1.5 bg-secondary hover:bg-secondary/80 rounded transition-colors"
+            >
+              <CheckSquare className="w-3 h-3" /> Select All
+            </button>
+            <button
+              onClick={onClearSelection}
+              className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest px-2.5 py-1.5 bg-background border border-border hover:bg-muted rounded transition-colors"
+            >
+              <X className="w-3 h-3" /> Clear
+            </button>
+          </div>
+        </div>
+      </div>
+
       <div className="grid grid-cols-4 gap-4">
         {sorted.map((image, idx) => (
           <div key={image.id} className="space-y-2">
@@ -121,6 +160,8 @@ export function ImageGrid({ projectId, images, videos, onReorder, onUpdate, onDe
             >
               <ImageCard
                 image={image}
+                selected={selectedImageIds.includes(image.id)}
+                onToggleSelect={() => onToggleSelect(image.id)}
                 status={
                   videos.some(v => v.imageId === image.id)
                     ? 'completed'

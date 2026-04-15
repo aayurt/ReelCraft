@@ -2,9 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useRouter as useNextRouter } from "next/navigation";
 import { VideoGrid } from "@/components/project/video-grid";
 import { CombinePanel } from "@/components/project/combine-panel";
+import { CheckSquare, X } from "lucide-react";
 
 interface Project {
   id: number;
@@ -34,6 +34,21 @@ interface VideosPageClientProps {
 export function VideosPageClient({ project, videosList }: VideosPageClientProps) {
   const router = useRouter();
   const [videos, setVideos] = useState(videosList);
+  const [selectedVideoIds, setSelectedVideoIds] = useState<number[]>([]);
+
+  const handleToggleSelect = (id: number) => {
+    setSelectedVideoIds(prev =>
+      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    );
+  };
+
+  const handleSelectAll = () => {
+    setSelectedVideoIds(videos.map(v => v.id));
+  };
+
+  const handleClearSelection = () => {
+    setSelectedVideoIds([]);
+  };
 
   useEffect(() => {
     setVideos(videosList);
@@ -50,6 +65,28 @@ export function VideosPageClient({ project, videosList }: VideosPageClientProps)
           <a href={`/project/${project.id}`} className="text-sm hover:underline">← Back to Editor</a>
         </div>
       </div>
+
+      <div className="flex items-center justify-between bg-muted/30 p-3 rounded-lg border border-border mb-6">
+        <div className="flex items-center gap-4">
+          <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+            {selectedVideoIds.length} clips selected
+          </span>
+          <div className="flex gap-2">
+            <button
+              onClick={handleSelectAll}
+              className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest px-2.5 py-1.5 bg-secondary hover:bg-secondary/80 rounded transition-colors"
+            >
+              <CheckSquare className="w-3 h-3" /> Select All
+            </button>
+            <button
+              onClick={handleClearSelection}
+              className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest px-2.5 py-1.5 bg-background border border-border hover:bg-muted rounded transition-colors"
+            >
+              <X className="w-3 h-3" /> Clear
+            </button>
+          </div>
+        </div>
+      </div>
       
       <div className="grid grid-cols-3 gap-8">
         <div className="col-span-2">
@@ -57,6 +94,8 @@ export function VideosPageClient({ project, videosList }: VideosPageClientProps)
           <VideoGrid
             projectId={project.id}
             videos={videos}
+            selectedVideoIds={selectedVideoIds}
+            onToggleSelect={handleToggleSelect}
             onReorder={async (newVideos) => {
               setVideos(newVideos);
               await fetch(`/api/projects/${project.id}/videos/reorder`, {
@@ -87,13 +126,14 @@ export function VideosPageClient({ project, videosList }: VideosPageClientProps)
           {/* Combine */}
           <div>
             <h2 className="text-xl font-semibold mb-1">Combine Video</h2>
-            <p className="text-xs text-muted-foreground mb-4">Merge all clips into a final video with transitions.</p>
+            <p className="text-xs text-muted-foreground mb-4">Merge selected clips into a final video with transitions.</p>
             <CombinePanel
               projectId={project.id}
               transitionType={project.transitionType}
               transitionDuration={project.transitionDuration}
               audioUrl={project.audioUrl}
               videos={videos}
+              selectedVideoIds={selectedVideoIds}
               onSettingsChange={async () => {}}
             />
           </div>

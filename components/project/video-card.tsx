@@ -1,6 +1,6 @@
-"use client";
-
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { cn } from "@/lib/utils";
+import { Check, Play, Pause } from "lucide-react";
 
 interface VideoCardProps {
   video: {
@@ -13,6 +13,9 @@ interface VideoCardProps {
     transitionDuration: number;
     source: string;
   };
+  selected?: boolean;
+  onToggleSelect?: () => void;
+  onClick?: () => void;
   onUpdate: (id: number, updates: Partial<{
     order: number;
     duration: number;
@@ -29,11 +32,20 @@ const TRANSITION_OPTIONS = [
   { value: "dissolve", label: "Dissolve" },
 ];
 
-export function VideoCard({ video, onUpdate, onDelete }: VideoCardProps) {
+export function VideoCard({ 
+  video, 
+  selected = false,
+  onToggleSelect,
+  onClick,
+  onUpdate, 
+  onDelete 
+}: VideoCardProps) {
   const [duration, setDuration] = useState(video.duration);
   const [order, setOrder] = useState(video.order);
   const [transitionType, setTransitionType] = useState(video.transitionType);
   const [transitionDuration, setTransitionDuration] = useState(video.transitionDuration);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
   
   useEffect(() => {
     setDuration(video.duration);
@@ -41,6 +53,33 @@ export function VideoCard({ video, onUpdate, onDelete }: VideoCardProps) {
     setTransitionType(video.transitionType);
     setTransitionDuration(video.transitionDuration);
   }, [video.duration, video.order, video.transitionType, video.transitionDuration]);
+
+  const togglePlay = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (videoRef.current) {
+      if (isPlaying) {
+        videoRef.current.pause();
+      } else {
+        videoRef.current.play();
+      }
+      setIsPlaying(!isPlaying);
+    }
+  };
+
+  const handleMouseEnter = () => {
+    if (videoRef.current) {
+      videoRef.current.play().catch(() => {});
+      setIsPlaying(true);
+    }
+  };
+
+  const handleMouseLeave = () => {
+    if (videoRef.current) {
+      videoRef.current.pause();
+      videoRef.current.currentTime = 0;
+      setIsPlaying(false);
+    }
+  };
 
   const handleDurationChange = (value: number) => {
     setDuration(value);
@@ -63,23 +102,90 @@ export function VideoCard({ video, onUpdate, onDelete }: VideoCardProps) {
   };
   
   return (
-    <div className="relative group" data-testid="video-card">
-      <video
-        src={video.url}
-        className="w-full h-32 object-cover rounded shadow-sm border border-border"
-        muted
-        preload="metadata"
-      />
-      <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity rounded flex flex-col items-center justify-center gap-2">
-        <button
-          onClick={() => onDelete(video.id)}
-          className="bg-destructive hover:bg-destructive/90 text-destructive-foreground px-3 py-1.5 rounded text-xs font-medium transition-colors shadow-sm"
+    <div className={cn(
+      "relative group rounded-lg transition-all duration-300 p-0.5",
+      selected
+        ? "border-2 border-primary shadow-[0_0_15px_rgba(var(--primary),0.25)]"
+        : "border border-border"
+    )} data-testid="video-card">
+      <div 
+        className="relative overflow-hidden rounded-md"
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+      >
+        {/* Selection Checkbox */}
+        <div 
+          className="absolute top-2 left-2 z-20"
+          onClick={(e) => {
+            e.stopPropagation();
+          }}
         >
-          Remove
-        </button>
-        <span className="text-[10px] text-white/70">
-          {video.source === "manual" ? "Manual" : "Generated"}
-        </span>
+          <div 
+            className={cn(
+              "w-5 h-5 rounded-md border-2 transition-all flex items-center justify-center cursor-pointer",
+              selected 
+                ? "bg-primary border-primary shadow-lg" 
+                : "bg-black/20 border-white/50 backdrop-blur-sm group-hover:border-white opacity-0 group-hover:opacity-100"
+            )}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleSelect?.();
+            }}
+          >
+            {selected && <Check className="w-3.5 h-3.5 text-primary-foreground" strokeWidth={3} />}
+          </div>
+        </div>
+
+        <video
+          ref={videoRef}
+          src={video.url}
+          className="w-full h-32 object-cover rounded cursor-pointer"
+          muted
+          loop
+          preload="metadata"
+          onPlay={() => setIsPlaying(true)}
+          onPause={() => setIsPlaying(false)}
+          onClick={(e) => {
+            e.stopPropagation();
+            onClick?.();
+          }}
+        />
+        
+        {/* Play/Pause Overlay */}
+        <div 
+          className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer pointer-events-none"
+        >
+          <div className="bg-white/20 backdrop-blur-md rounded-full p-3 border border-white/30 transform transition-transform group-hover:scale-110">
+            {isPlaying ? (
+              <Pause className="w-6 h-6 text-white fill-white" />
+            ) : (
+              <Play className="w-6 h-6 text-white fill-white ml-0.5" />
+            )}
+          </div>
+        </div>
+
+        <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-end p-3 gap-2 pointer-events-none">
+          <div className="flex gap-2 pointer-events-auto">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete(video.id);
+              }}
+              className="bg-destructive hover:bg-destructive/90 text-destructive-foreground px-3 py-1.5 rounded text-xs font-medium transition-colors shadow-sm"
+            >
+              Remove
+            </button>
+            <button
+              onClick={togglePlay}
+              className="bg-white/10 hover:bg-white/20 text-white border border-white/20 px-3 py-1.5 rounded text-xs font-medium transition-colors shadow-sm"
+            >
+              {isPlaying ? "Pause" : "Play"}
+            </button>
+          </div>
+          <span className="text-[10px] text-white/70">
+            {video.source === "manual" ? "Manual" : "Generated"}
+          </span>
+        </div>
       </div>
       <div className="mt-2 space-y-2">
         <div className="grid grid-cols-2 gap-2">

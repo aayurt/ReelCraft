@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { VideoCard } from "./video-card";
+import { VideoModal } from "./video-modal";
 
 interface Video {
   id: number;
@@ -17,6 +18,8 @@ interface Video {
 interface VideoGridProps {
   projectId: number;
   videos: Video[];
+  selectedVideoIds: number[];
+  onToggleSelect: (id: number) => void;
   onReorder: (videos: Video[]) => void;
   onUpdate: (id: number, updates: Partial<Video>) => void;
   onDelete: (id: number) => void;
@@ -28,9 +31,18 @@ function getOrdinal(n: number) {
   return n + (s[(v - 20) % 10] || s[v] || s[0]);
 }
 
-export function VideoGrid({ projectId, videos, onReorder, onUpdate, onDelete }: VideoGridProps) {
+export function VideoGrid({ 
+  projectId, 
+  videos, 
+  selectedVideoIds,
+  onToggleSelect,
+  onReorder, 
+  onUpdate, 
+  onDelete 
+}: VideoGridProps) {
   const [draggedId, setDraggedId] = useState<number | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [selectedVideo, setSelectedVideo] = useState<Video | null>(null);
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files?.[0]) return;
@@ -98,6 +110,9 @@ export function VideoGrid({ projectId, videos, onReorder, onUpdate, onDelete }: 
             >
               <VideoCard
                 video={video}
+                selected={selectedVideoIds.includes(video.id)}
+                onToggleSelect={() => onToggleSelect(video.id)}
+                onClick={() => setSelectedVideo(video)}
                 onUpdate={onUpdate}
                 onDelete={onDelete}
               />
@@ -105,6 +120,14 @@ export function VideoGrid({ projectId, videos, onReorder, onUpdate, onDelete }: 
           </div>
         ))}
       </div>
+
+      {selectedVideo && (
+        <VideoModal 
+          video={selectedVideo} 
+          onClose={() => setSelectedVideo(null)}
+          onDelete={() => onDelete(selectedVideo.id)}
+        />
+      )}
       
       <div className="space-y-2">
         <h3 className="text-sm font-semibold text-muted-foreground">{getOrdinal(videos.length + 1)} clip</h3>
