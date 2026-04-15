@@ -28,7 +28,7 @@ async function dismissQwenStudioModal(page) {
         console.log('Modal closed successfully');
         return true;
       }
-    } catch {}
+    } catch { }
     await page.keyboard.press('Escape');
     return true;
   }
@@ -101,7 +101,7 @@ async function generateVideoFromImage(imagePath, prompt, outputName, authStatePa
     throw new Error(`Auth state file not found: ${authStatePath}`);
   }
 
-  const browser = await chromium.launch({ headless: false });
+  const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({
     storageState: authStatePath, viewport: { width: 1280, height: 720 },
     screen: { width: 1280, height: 720 },
