@@ -7,22 +7,22 @@ LOCAL_PATH="/Users/aayurtshrestha/projects/movieGen"
 
 echo "🚀 Starting deploy..."
 
-
 # echo "📄 Copying .env to server..."
 # rsync -avz "$LOCAL_PATH/.env" "$SERVER:$REMOTE_PATH/.env"
 
 # echo "🤖 Copying qwen-automate folder to server..."
-# rsync -avz "$LOCAL_PATH/qwen-automate/" "$SERVER:$REMOTE_PATH/qwen-automate/"
+# rsync -avz --exclude='auth_states/' --exclude='outputs/' --exclude='verify/' --exclude='error_screenshot.png' --exclude='node_modules/' "$LOCAL_PATH/qwen-automate/" "$SERVER:$REMOTE_PATH/qwen-automate/"
+
+# echo "📁 Syncing uploads to server..."
 # rsync -avz "$LOCAL_PATH/uploads/" "$SERVER:$REMOTE_PATH/uploads/"
 
-# 2️⃣ SSH once to stop API, clean old DB (already synced if needed), and restart safely
-
+# SSH: pull, build, and restart
 ssh $SERVER "bash -c '
   source ~/.nvm/nvm.sh
   echo \"Git pull\"
-  cd /var/www/ReelCraft 
+  cd /var/www/ReelCraft
   git pull origin
-  
+
   echo \"📦 Installing dependencies...\"
   pnpm install
 
@@ -40,11 +40,8 @@ ssh $SERVER "bash -c '
     echo \"✅ Copied .next/static to standalone\"
   fi
   
-  echo \"🛑 Removing old processes...\"
-  
   echo \"✅ Starting Reely...\"
   pm2 restart ecosystem.config.js
   pm2 save
   echo \"🎉 Deploy complete!\"
 '"
-# pm2 delete ecosystem.config.js || true
