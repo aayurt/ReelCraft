@@ -155,13 +155,12 @@ export function GeneratePanel({ projectId, images, onComplete }: GeneratePanelPr
                   onChange={() => toggleFrame(frame.id)}
                   className='w-4 h-4 rounded border-border text-primary focus:ring-primary'
                 />
-                <div className='w-10 h-10 rounded overflow-hidden flex-shrink-0 border border-border'>
-                  {frame.filename === 'CONTINUE_FRAME' ? (
-                    <div className='w-full h-full bg-primary/20 flex items-center justify-center'>
-                      <span className='text-[9px] text-primary font-bold'>CONT</span>
+                <div className='w-10 h-10 rounded overflow-hidden flex-shrink-0 border border-border relative'>
+                  <img src={frame.url} alt={frame.filename} className='w-full h-full object-cover' />
+                  {frame.filename === 'CONTINUE_FRAME' && (
+                    <div className='absolute inset-0 bg-primary/20 flex items-center justify-center'>
+                      <span className='text-[8px] bg-primary text-primary-foreground px-1 py-0.5 rounded font-bold shadow-sm'>CONT</span>
                     </div>
-                  ) : (
-                    <img src={frame.url} alt={frame.filename} className='w-full h-full object-cover' />
                   )}
                 </div>
                 <div className='flex-1 min-w-0'>

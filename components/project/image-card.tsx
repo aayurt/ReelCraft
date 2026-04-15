@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { cn } from "@/lib/utils";
 
 interface ImageCardProps {
   image: {
@@ -12,15 +13,16 @@ interface ImageCardProps {
     prompt: string;
     audioUrl: string | null;
   };
+  status?: 'pending' | 'completed' | 'next' | 'uploaded';
   onClick: () => void;
   onUpdate: (id: number, updates: Partial<{ order: number; duration: number; prompt: string; audioUrl: string | null }>) => void;
   onDelete: (id: number) => void;
 }
 
-export function ImageCard({ image, onClick, onUpdate, onDelete }: ImageCardProps) {
+export function ImageCard({ image, status = 'pending', onClick, onUpdate, onDelete }: ImageCardProps) {
   const [duration, setDuration] = useState(image.duration);
   const [order, setOrder] = useState(image.order);
-  
+
   useEffect(() => {
     setDuration(image.duration);
     setOrder(image.order);
@@ -30,27 +32,35 @@ export function ImageCard({ image, onClick, onUpdate, onDelete }: ImageCardProps
     setDuration(value);
     onUpdate(image.id, { duration: value });
   };
-  
+
   const handleOrderChange = (value: number) => {
     setOrder(value);
     onUpdate(image.id, { order: value });
   };
-  
+
   return (
-    <div className="relative group">
-      {image.filename === "CONTINUE_FRAME" ? (
-        <div className="w-full h-32 bg-secondary rounded flex flex-col items-center justify-center p-4 text-center border-2 border-dashed border-primary/50 relative overflow-hidden">
-          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary mb-2 opacity-80"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><line x1="9" x2="15" y1="3" y2="3"/><line x1="9" x2="15" y1="21" y2="21"/><line x1="9" x2="15" y1="9" y2="9"/><line x1="9" x2="15" y1="15" y2="15"/></svg>
-          <span className="text-xs font-semibold text-primary/80 uppercase tracking-wider">Continued Frame</span>
-          <div className="absolute inset-x-0 bottom-0 h-1 bg-gradient-to-r from-transparent via-primary/50 to-transparent"></div>
-        </div>
-      ) : (
+    <div className={cn(
+      "relative group rounded-lg transition-all duration-300 p-0.5",
+      status === 'completed'
+        ? "border-2 border-yellow-400 shadow-[0_0_15px_rgba(245,158,11,0.25)]"
+        : status === 'next'
+          ? "border-2 border-blue-800 shadow-[0_0_10px_rgba(34,197,94,0.2)]"
+          : status === 'uploaded'
+            ? "border-2  border-green-500 shadow-[0_0_10px_rgba(250,204,21,0.15)]"
+            : "border-2 border-blue-300 opacity-80"
+    )}>
+      <div className="relative overflow-hidden rounded-md">
         <img
           src={image.url}
           alt={image.filename}
-          className="w-full h-32 object-cover rounded shadow-sm border border-border"
+          className="w-full h-32 object-cover rounded shadow-sm border border-border transition-all duration-300"
         />
-      )}
+        {image.filename === "CONTINUE_FRAME" && (
+          <div className="absolute top-2 right-2 bg-primary/90 text-primary-foreground text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider shadow-sm z-10 border border-primary-foreground/20">
+            Continued
+          </div>
+        )}
+      </div>
       <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity rounded flex flex-col items-center justify-center gap-3">
         <button
           onClick={(e) => {

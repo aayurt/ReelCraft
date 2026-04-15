@@ -263,14 +263,26 @@ export async function captureFrame(videoPath: string, timestamp: string = "00:00
 
   const outputPath = videoPath.replace(".mp4", "-frame.jpg");
 
-  const args = [
-    "-y",
-    "-ss", timestamp,
-    "-i", videoPath,
-    "-vframes", "1",
-    "-q:v", "2",
-    outputPath,
-  ];
+  let args: string[];
+  if (timestamp === 'end') {
+    args = [
+      "-y",
+      "-sseof", "-0.1",
+      "-i", videoPath,
+      "-update", "1",
+      "-q:v", "2",
+      outputPath,
+    ];
+  } else {
+    args = [
+      "-y",
+      "-ss", timestamp,
+      "-i", videoPath,
+      "-vframes", "1",
+      "-q:v", "2",
+      outputPath,
+    ];
+  }
 
   return new Promise((resolve, reject) => {
     const ffmpeg = spawn("ffmpeg", args);

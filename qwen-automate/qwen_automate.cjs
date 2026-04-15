@@ -2,6 +2,51 @@ const { chromium } = require('playwright');
 const path = require('path');
 const fs = require('fs');
 
+// ==========================================
+// CONFIGURATION & CONSTANTS
+// ==========================================
+const PARALLEL_EXECUTION_NUMBER = 1; // Number of parallel browsers
+const HEADLESS_MODE = false;
+const RETRY_ATTEMPTS = 5;
+
+const VIDEO_GENERATION_TIMEOUT = 2000000; // 2000s
+const DOWNLOAD_TIMEOUT = 30000;         // 30s
+const UPLOAD_WAIT_TIME = 20000;         // 20s
+const NAVIGATION_TIMEOUT = 5000;        // 5s
+
+const AUTH_STATES_DIR = path.join(__dirname, 'auth_states');
+const ACCOUNT_STATE_FILE = path.join(AUTH_STATES_DIR, '.accountState.json');
+const OUTPUT_DIR = path.join(__dirname, 'outputs');
+
+const SELECTORS = {
+  MODAL_CLOSE: '.qwen-chat-comp-update-modal-close',
+  MODE_SELECT: '.mode-select-open',
+  TEXTAREA: '.message-input-textarea',
+  SEND_BUTTON: '.omni-button-content-btn',
+  VIDEO_DIV: 'div.qwen-video',
+  DOWNLOAD_BTN: 'div.qwen-media-preview-toolbar-item',
+  VIEWER_CLOSE: 'div.qwen-video-viewer-content-close',
+  UPLOAD_BTN_ID: '#uploadButton'
+};
+
+const RATE_LIMIT_MESSAGES = [
+  'Too many requests in a short period',
+  'You have reached the daily usage limit',
+  'reached the daily usage limit',
+  'Rate limit reached',
+  'Usage exceeded',
+  'quota exceeded',
+  'Requests rate limit exceeded'
+];
+
+// ==========================================
+// LOGGING & UTILITIES
+// ==========================================
+function log(message) {
+  const timestamp = new Date().toISOString();
+  console.log(`[${timestamp}] ${message}`);
+}
+
 class RateLimitError extends Error {
   constructor(message) {
     super(message);
@@ -16,46 +61,23 @@ class RequestFloodError extends RateLimitError {
   }
 }
 
-async function dismissQwenStudioModal(page) {
-  const pageContent = await page.content();
-  if (pageContent.includes('Qwen Studio') || pageContent.includes('Big News')) {
-    console.log('Detecting Qwen Studio modal, attempting to close...');
-    try {
-      const modalCloseBtn = page.locator('.qwen-chat-comp-update-modal-close');
-      if (await modalCloseBtn.isVisible({ timeout: 1000 })) {
-        await modalCloseBtn.click();
-        await page.waitForTimeout(500);
-        console.log('Modal closed successfully');
-        return true;
-      }
-    } catch { }
-    await page.keyboard.press('Escape');
-    return true;
-  }
-  return false;
-}
-
-const AUTH_STATES_DIR = path.join(__dirname, 'auth_states');
-const ACCOUNT_STATE_FILE = path.join(AUTH_STATES_DIR, '.accountState.json');
-
+// ==========================================
+// ACCOUNT MANAGEMENT
+// ==========================================
 function discoverAccounts() {
-  if (!fs.existsSync(AUTH_STATES_DIR)) {
-    return [];
-  }
-  const files = fs.readdirSync(AUTH_STATES_DIR)
+  if (!fs.existsSync(AUTH_STATES_DIR)) return [];
+  return fs.readdirSync(AUTH_STATES_DIR)
     .filter(f => /^account\d+\.json$/.test(f))
     .sort((a, b) => {
       const numA = parseInt(a.match(/\d+/)[0]);
       const numB = parseInt(b.match(/\d+/)[0]);
       return numA - numB;
-    });
-  return files.map(f => path.join(AUTH_STATES_DIR, f));
+    })
+    .map(f => path.join(AUTH_STATES_DIR, f));
 }
 
 function loadAccountState() {
-  if (!fs.existsSync(ACCOUNT_STATE_FILE)) {
-    return { lastIndex: -1 };
-  }
+  if (!fs.existsSync(ACCOUNT_STATE_FILE)) return { lastIndex: -1 };
   try {
     return JSON.parse(fs.readFileSync(ACCOUNT_STATE_FILE, 'utf8'));
   } catch {
@@ -69,16 +91,11 @@ function saveAccountState(state) {
 
 function getNextAccountPath() {
   const accounts = discoverAccounts();
-  if (accounts.length === 0) {
-    throw new Error('No account*.json files found in auth_states/');
-  }
+  if (accounts.length === 0) throw new Error('No account*.json files found');
   const state = loadAccountState();
-  let nextIndex = state.lastIndex + 1;
-  if (nextIndex >= accounts.length) {
-    nextIndex = 0;
-  }
+  let nextIndex = (state.lastIndex + 1) % accounts.length;
   saveAccountState({ lastIndex: nextIndex });
-  console.log(`Using account: account${nextIndex + 1}.json`);
+  log(`Account selection: Using account ${path.basename(accounts[nextIndex])}`);
   return accounts[nextIndex];
 }
 
@@ -93,82 +110,127 @@ function getAccountPathByNumber(num) {
 
 function resetAccountState() {
   saveAccountState({ lastIndex: -1 });
-  console.log('Account state reset to account1');
+  log('Account state reset to account1');
 }
+
+function getAccountEmail(filePath) {
+  try {
+    if (!fs.existsSync(filePath)) return 'Unknown';
+    const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    if (data.origins) {
+      for (const origin of data.origins) {
+        if (origin.origin === 'https://temp-mail.io' && origin.localStorage) {
+          const emailItem = origin.localStorage.find(item => item.name === 'emails');
+          if (emailItem) {
+            const emails = JSON.parse(emailItem.value);
+            if (emails[0] && emails[0].email) return emails[0].email;
+          }
+        }
+      }
+    }
+    return 'Unknown';
+  } catch {
+    return 'Unknown';
+  }
+}
+
+// ==========================================
+// UI HELPERS
+// ==========================================
+async function dismissQwenStudioModal(page) {
+  const pageContent = await page.content();
+  if (pageContent.includes('Qwen Studio') || pageContent.includes('Big News')) {
+    log('Detecting Qwen Studio modal, attempting to close...');
+    try {
+      const modalCloseBtn = page.locator(SELECTORS.MODAL_CLOSE);
+      if (await modalCloseBtn.isVisible({ timeout: 1000 })) {
+        await modalCloseBtn.click();
+        await page.waitForTimeout(500);
+        log('Modal closed successfully');
+        return true;
+      }
+    } catch { }
+    await page.keyboard.press('Escape');
+    return true;
+  }
+  return false;
+}
+
+// ==========================================
+// CORE LOGIC
+// ==========================================
+let activeBrowser = null;
+
+// Graceful exit handlers
+async function cleanup() {
+  if (activeBrowser) {
+    log('Gracefully closing browser before exit...');
+    await activeBrowser.close();
+    activeBrowser = null;
+  }
+}
+process.on('SIGINT', async () => { await cleanup(); process.exit(0); });
+process.on('SIGTERM', async () => { await cleanup(); process.exit(0); });
 
 async function generateVideoFromImage(imagePath, prompt, outputName, authStatePath, onRateLimit = null) {
   if (!fs.existsSync(authStatePath)) {
     throw new Error(`Auth state file not found: ${authStatePath}`);
   }
 
-  const browser = await chromium.launch({ headless: true });
+  const email = getAccountEmail(authStatePath);
+  const browser = await chromium.launch({ headless: HEADLESS_MODE });
+  activeBrowser = browser; // Track for signal cleanup
+
   const context = await browser.newContext({
-    storageState: authStatePath, viewport: { width: 1280, height: 720 },
+    storageState: authStatePath,
+    viewport: { width: 1280, height: 720 },
     screen: { width: 1280, height: 720 },
   });
   const page = await context.newPage();
 
+  let success = false;
+
   try {
-    console.log('Navigating to Qwen Chat...');
+    log(`STEP 1: Navigating to Qwen Chat (Email: ${email})...`);
     await page.goto('https://chat.qwen.ai/');
-    await page.waitForTimeout(5000);
+    await page.waitForTimeout(NAVIGATION_TIMEOUT);
 
-    const pageContent = await page.content();
-    if (pageContent.includes('Qwen Studio') || pageContent.includes('Big News')) {
-      console.log('Detected Qwen Studio modal, attempting to close...');
-      try {
-        const modalCloseBtn = page.locator('.qwen-chat-comp-update-modal-close');
-        if (await modalCloseBtn.isVisible({ timeout: 3000 })) {
-          await modalCloseBtn.click();
-          await page.waitForTimeout(1000);
-          console.log('Modal closed successfully');
-        }
-      } catch {
-        await page.keyboard.press('Escape');
-        await page.waitForTimeout(500);
-      }
-    }
+    await dismissQwenStudioModal(page);
 
-    console.log('Clicking the features menu (+)...');
-    await page.click('.mode-select-open');
+    log('STEP 2: Clicking the features menu (+)...');
+    await page.click(SELECTORS.MODE_SELECT);
     await page.waitForTimeout(1000);
 
-    console.log('Selecting "Create Video"...');
-    const createVideoBtn = page.getByText('Create Video', { exact: true });
-    await createVideoBtn.click();
+    log('STEP 3: Selecting "Create Video"...');
+    await page.getByText('Create Video', { exact: true }).click();
     await page.waitForTimeout(2000);
 
-    console.log('Triggering file upload dialog...');
-
+    log('STEP 4: Triggering file upload dialog...');
     const [fileChooser] = await Promise.all([
       page.waitForEvent('filechooser'),
       (async () => {
-        const userButton = page.locator('#uploadButton');
+        const userButton = page.locator(SELECTORS.UPLOAD_BTN_ID);
         if (await userButton.isVisible()) {
           await userButton.click();
         } else {
-          await page.click('.mode-select-open');
+          await page.click(SELECTORS.MODE_SELECT);
           await page.waitForTimeout(1000);
-          const uploadBtn = page.getByText('Upload attachment', { exact: false });
-          await uploadBtn.click();
+          await page.getByText('Upload attachment', { exact: false }).click();
         }
       })()
     ]);
-
     await fileChooser.setFiles(imagePath);
 
-    console.log('Waiting for upload to be processed by UI...');
-    await page.waitForTimeout(20000);
-
+    log('STEP 5: Waiting for upload to be processed by UI...');
+    await page.waitForTimeout(UPLOAD_WAIT_TIME);
     await page.screenshot({ path: `verify/upload_verify_${outputName.split('.')[0]}.png` });
 
-    console.log(`Entering prompt: ${prompt}...`);
-    const textarea = page.locator('.message-input-textarea');
-    await textarea.fill(prompt);
+    log(`STEP 6: Entering prompt: ${prompt}...`);
+    await page.locator(SELECTORS.TEXTAREA).fill(prompt);
     await page.waitForTimeout(5000);
 
-    console.log('Starting video generation...');
-    const sendButton = page.locator('.omni-button-content-btn');
+    log('STEP 7: Starting video generation...');
+    const sendButton = page.locator(SELECTORS.SEND_BUTTON);
     if (await sendButton.isVisible()) {
       await sendButton.click();
     } else {
@@ -176,153 +238,81 @@ async function generateVideoFromImage(imagePath, prompt, outputName, authStatePa
     }
 
     await page.waitForTimeout(2000);
-    const limitMessages = [
-      'Too many requests in a short period',
-      'You have reached the daily usage limit',
-      'reached the daily usage limit',
-      'Rate limit reached',
-      'Usage exceeded',
-      'quota exceeded'
-    ];
-
-    const pageContent1 = await page.content();
-    for (const msg of limitMessages) {
-      if (pageContent1.includes(msg)) {
-        console.log(`Rate limit detected: "${msg}"`);
+    const pageContent = await page.content();
+    for (const msg of RATE_LIMIT_MESSAGES) {
+      if (pageContent.includes(msg)) {
+        log(`RATE LIMIT: Detected "${msg}"`);
         await browser.close();
-        const isRequestFlood = msg === 'Too many requests in a short period';
-        if (onRateLimit) {
-          return await onRateLimit(isRequestFlood);
-        }
-        throw (isRequestFlood ? new RequestFloodError(`Request flood hit: ${msg}`) : new RateLimitError(`Rate limit hit: ${msg}`));
+        const isFlood = msg === 'Too many requests in a short period';
+        if (onRateLimit) return await onRateLimit(isFlood);
+        throw (isFlood ? new RequestFloodError(msg) : new RateLimitError(msg));
       }
     }
 
-    console.log('Waiting for video generation to complete (this may take a few minutes)...');
-
+    log('STEP 8: Waiting for video generation...');
     let downloadLink = null;
     const startTime = Date.now();
-    const TIMEOUT = 1000000;
 
-    while (Date.now() - startTime < TIMEOUT) {
-      const videoLocator = page.locator('div.qwen-video').last();
-      const videoFound = await videoLocator.count() > 0;
-
-      if (videoFound) {
-        const isModalOpen = await page.locator('div.qwen-video-viewer-content-close').isVisible();
-
+    while ((Date.now() - startTime) < VIDEO_GENERATION_TIMEOUT) {
+      const videoLocator = page.locator(SELECTORS.VIDEO_DIV).last();
+      if (await videoLocator.count() > 0) {
+        const isModalOpen = await page.locator(SELECTORS.VIEWER_CLOSE).isVisible();
         if (!isModalOpen) {
-          console.log('Video detected! Clicking qwen-video to open preview...');
-
-          const modelContent = await page.content();
-          if (modelContent.includes('Qwen Studio') || modelContent.includes('Big News')) {
-            console.log('Detected Qwen Studio modal, attempting to close...');
-            try {
-              const modalCloseBtn = page.locator('.qwen-chat-comp-update-modal-close');
-              if (await modalCloseBtn.isVisible({ timeout: 3000 })) {
-                await modalCloseBtn.click();
-                await page.waitForTimeout(1000);
-                console.log('Modal closed successfully');
-              }
-            } catch {
-              await page.keyboard.press('Escape');
-              await page.waitForTimeout(500);
-            }
-          }
-
-
+          log('SUCCESS: Video detected! Opening preview...');
+          await dismissQwenStudioModal(page);
           try {
             await videoLocator.click({ timeout: 5000 });
             await page.waitForTimeout(3000);
-          } catch (err) {
-            console.log('Failed to click video container, retrying...');
+          } catch {
+            log('Notice: Failed to click video container, retrying...');
           }
         }
-
-        const downloadBtn = page.locator('div.qwen-media-preview-toolbar-item').filter({ hasText: 'Download' }).last();
-
+        const downloadBtn = page.locator(SELECTORS.DOWNLOAD_BTN).filter({ hasText: 'Download' }).last();
         if (await downloadBtn.isVisible()) {
           downloadLink = downloadBtn;
-          console.log('Download button found in qwen-media-preview-toolbar!');
+          log('STEP 9: Download button found!');
           break;
         }
       }
-
+      
+      if (page.isClosed()) break;
       await page.waitForTimeout(5000);
+      
       const elapsed = Math.floor((Date.now() - startTime) / 1000);
-      if (elapsed % 60 === 0) console.log(`Still waiting... ${elapsed}s elapsed.`);
-
+      if (elapsed % 60 === 0) log(`Progress: Waiting... ${elapsed}s elapsed.`);
       await dismissQwenStudioModal(page);
 
-      const checkLimitMessages = [
-        'Too many requests in a short period',
-        'You have reached the daily usage limit',
-        'reached the daily usage limit',
-        'Rate limit reached',
-        'Usage exceeded',
-        'quota exceeded'
-      ];
       const checkContent = await page.content();
-      for (const msg of checkLimitMessages) {
+      for (const msg of RATE_LIMIT_MESSAGES) {
         if (checkContent.includes(msg)) {
-          console.log(`Rate limit detected during generation: "${msg}"`);
+          log(`RATE LIMIT: Detected: "${msg}"`);
           await browser.close();
-          const isRequestFlood = msg === 'Too many requests in a short period';
-          if (onRateLimit) {
-            return await onRateLimit(isRequestFlood);
-          }
-          throw (isRequestFlood ? new RequestFloodError(`Request flood hit: ${msg}`) : new RateLimitError(`Rate limit hit: ${msg}`));
+          const isFlood = msg === 'Too many requests in a short period';
+          if (onRateLimit) return await onRateLimit(isFlood);
+          throw (isFlood ? new RequestFloodError(msg) : new RateLimitError(msg));
         }
       }
     }
 
-    console.log('Checking for Qwen modal...');
+    if (!downloadLink) throw new Error('Download button not defined');
 
-    // Always attempt to close modal (no brittle content check)
-    await page.locator('.qwen-chat-comp-update-modal-close')
-      .first()
-      .click({ timeout: 5000 })
-      .catch(() => {
-        console.log('No modal close button found or already closed');
-      });
-
-    // Small buffer to ensure UI is ready
-    await page.waitForTimeout(1000);
-
-    if (!downloadLink) {
-      throw new Error('Download button not defined');
-    }
-
-    console.log('Waiting for download button...');
-    await downloadLink.waitFor({ state: 'visible', timeout: 15000 });
-
-    console.log('Attempting download...');
+    log('STEP 10: Finalizing download...');
+    await downloadLink.waitFor({ state: 'visible', timeout: DOWNLOAD_TIMEOUT });
+    log(`Waiting for browser download event (${DOWNLOAD_TIMEOUT / 1000}s timeout)...`);
 
     let download;
-
     try {
-      [download] = await Promise.all([
-        page.waitForEvent('download', { timeout: 15000 }),
-        downloadLink.click()
-      ]);
-
-      console.log('Download triggered successfully');
-
-    } catch (err) {
-      console.log('Download event not triggered, trying fallback...');
-
-      // fallback: maybe it's not a real "download" event
+      const downloadPromise = page.waitForEvent('download', { timeout: DOWNLOAD_TIMEOUT });
       await downloadLink.click();
-
-      // optional: wait to observe what happens
-      await page.waitForTimeout(5000);
+      download = await downloadPromise;
+      log('Download event received successfully');
+    } catch {
+      log('Download event timed out. Browser staying open for manual testing.');
+      log('TIP: You can click the Download button in the browser window yourself.');
+      throw new Error('Download failed to trigger automatically.');
     }
 
-    if (!download) {
-      throw new Error('Download failed or did not trigger a browser download event.');
-    }
-
-    const closeBtn = page.locator('div.qwen-video-viewer-content-close');
+    const closeBtn = page.locator(SELECTORS.VIEWER_CLOSE);
     if (await closeBtn.isVisible()) {
       await closeBtn.click();
       await page.waitForTimeout(1000);
@@ -330,98 +320,72 @@ async function generateVideoFromImage(imagePath, prompt, outputName, authStatePa
       await page.keyboard.press('Escape');
     }
 
-    const outputPath = path.join(__dirname, 'outputs', outputName);
-    if (!fs.existsSync(path.join(__dirname, 'outputs'))) {
-      fs.mkdirSync(path.join(__dirname, 'outputs'));
-    }
-
+    const outputPath = path.join(OUTPUT_DIR, outputName);
+    if (!fs.existsSync(OUTPUT_DIR)) fs.mkdirSync(OUTPUT_DIR);
     await download.saveAs(outputPath);
-    console.log(`Video saved to: ${outputPath}`);
+    log(`COMPLETED: Video saved to: ${outputPath}`);
 
+    success = true;
     return outputPath;
 
   } catch (error) {
-    console.error('An error occurred during automation:', error);
-    await page.screenshot({ path: 'error_screenshot.png' });
+    log(`FATAL ERROR: ${error.message}`);
+    try {
+      await page.screenshot({ path: 'error_screenshot.png' });
+    } catch { }
     throw error;
   } finally {
-    await browser.close();
+    if (success) {
+      log('Closing browser after successful run.');
+      await browser.close();
+      activeBrowser = null;
+    } else {
+      log('KEEPING BROWSER OPEN for manual inspection.');
+    }
   }
 }
 
+// ==========================================
+// CLI & ENTRY POINT
+// ==========================================
 if (require.main === module) {
   (async () => {
     const args = process.argv.slice(2);
-
-    if (args[0] === '--reset') {
-      resetAccountState();
-      process.exit(0);
-    }
+    if (args[0] === '--reset') { resetAccountState(); process.exit(0); }
     if (args[0] === '--list') {
-      const accounts = discoverAccounts();
-      console.log('Available accounts:');
-      accounts.forEach((acc, i) => console.log(`  ${i + 1}: ${path.basename(acc)}`));
+      log('Available accounts:');
+      discoverAccounts().forEach((acc, i) => console.log(`  ${i + 1}: ${path.basename(acc)}`));
       process.exit(0);
     }
 
     const img = args[0] || 'input.jpg';
     const p = args[1] || 'Describe motion for the image';
     const out = args[2] || 'video_output.mp4';
-
-    let auth;
-    if (args[3]) {
-      const num = parseInt(args[3]);
-      if (!isNaN(num)) {
-        auth = getAccountPathByNumber(num);
-      } else {
-        auth = args[3];
-      }
-    } else {
-      auth = getNextAccountPath();
-    }
+    let auth = args[3] ? (isNaN(parseInt(args[3])) ? args[3] : getAccountPathByNumber(parseInt(args[3]))) : getNextAccountPath();
 
     if (!fs.existsSync(img)) {
-      console.log('Usage: node qwen_automate.cjs <image_path> <prompt> <output_name> [auth_account|auth_path|--reset|--list]');
-      console.log('  auth_account: 1-7 (use account1.json, account2.json, etc.)');
-      console.log('  auth_path:   path to custom auth state JSON');
-      console.log('  --reset:     reset account state to start from account1');
-      console.log('  --list:      list all available accounts');
-      console.log('  (default):   auto-select next account (round-robin)');
-      console.log('Example: node qwen_automate.cjs input.jpg "motion prompt" video.mp4');
-      console.log('Example: node qwen_automate.cjs input.jpg "motion prompt" video.mp4 3');
-      console.log('Example: node qwen_automate.cjs input.jpg "motion prompt" video.mp4 --reset');
-      console.log('Please provide a valid image path.');
+      log('Error: Image file not found.');
       process.exit(1);
     }
 
-    async function retryWithNextAccount(attemptImage, attemptPrompt, attemptOutput, retriesLeft, isRequestFlood = false) {
-      if (isRequestFlood) {
-        console.log('Request flood detected. Waiting 2 minutes before retry...');
-        await new Promise(resolve => setTimeout(resolve, 120000));
-      }
-
-      if (retriesLeft <= 0) {
-        console.error('No more accounts to retry.');
-        process.exit(1);
-      }
+    async function retryWithNextAccount(attemptImg, attemptPrompt, attemptOut, retriesLeft, isFlood = false) {
+      if (isFlood) { log('FLOOD DELAY: Waiting 2 minutes...'); await new Promise(r => setTimeout(r, 120000)); }
+      if (retriesLeft <= 0) { log('RETRY FAILED: Maximum retries reached.'); process.exit(1); }
       const nextAuth = getNextAccountPath();
-      console.log(`Retrying with ${path.basename(nextAuth)}... (${retriesLeft} retries left)`);
+      const nextEmail = getAccountEmail(nextAuth);
+      log(`RETRYING: ${path.basename(nextAuth)} (${nextEmail}) [${retriesLeft} left]`);
       try {
-        return await generateVideoFromImage(attemptImage, attemptPrompt, attemptOutput, nextAuth, (flood) => retryWithNextAccount(attemptImage, attemptPrompt, attemptOutput, retriesLeft - 1, flood));
+        return await generateVideoFromImage(attemptImg, attemptPrompt, attemptOut, nextAuth, (f) => retryWithNextAccount(attemptImg, attemptPrompt, attemptOut, retriesLeft - 1, f));
       } catch (err) {
-        if (err instanceof RateLimitError) {
-          const isFlood = err instanceof RequestFloodError;
-          return retryWithNextAccount(attemptImage, attemptPrompt, attemptOutput, retriesLeft - 1, isFlood);
-        }
+        if (err instanceof RateLimitError) return retryWithNextAccount(attemptImg, attemptPrompt, attemptOut, retriesLeft - 1, err instanceof RequestFloodError);
         throw err;
       }
     }
 
     try {
-      await generateVideoFromImage(img, p, out, auth, (isRequestFlood) => retryWithNextAccount(img, p, out, 7, isRequestFlood));
+      await generateVideoFromImage(img, p, out, auth, (f) => retryWithNextAccount(img, p, out, RETRY_ATTEMPTS, f));
     } catch (err) {
-      console.error(err);
-      process.exit(1);
+      log(`CRITICAL ERROR: ${err.message}`);
     }
   })();
 }

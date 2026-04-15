@@ -1,7 +1,11 @@
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/auth";
-import { projects, images } from "@/lib/schema";
+import { projects, images, videos } from "@/lib/schema";
 import { eq, and } from "drizzle-orm";
+import { captureFrame } from "@/lib/qwen-video";
+import { join } from "path";
+import { copyFile, mkdir } from "fs/promises";
+import { existsSync } from "fs";
 
 export async function POST(
   request: Request,
@@ -45,10 +49,39 @@ export async function POST(
   const allProjectImages = await db.query.images.findMany({
     where: eq(images.projectId, projectId),
   });
+
+  // Check if there's an existing video for the source image to capture its end frame
+  let imageUrl = sourceImage.url;
+  const sourceVideo = await db.query.videos.findFirst({
+    where: and(eq(videos.imageId, sourceImage.id), eq(videos.projectId, projectId)),
+  });
+
+  if (sourceVideo) {
+    try {
+      const videoFullPath = join(process.cwd(), sourceVideo.url);
+      if (existsSync(videoFullPath)) {
+        console.log(`[Duplicate] Found video for source image. Capturing end frame from ${videoFullPath}`);
+        const tempFramePath = await captureFrame(videoFullPath, 'end');
+        
+        const outputDir = join(process.cwd(), 'uploads', 'videos', id);
+        await mkdir(outputDir, { recursive: true });
+        
+        const destFilename = `frame_image_dup_${Date.now()}.jpg`;
+        const destPath = join(outputDir, destFilename);
+        
+        await copyFile(tempFramePath, destPath);
+        imageUrl = `/uploads/videos/${id}/${destFilename}`;
+        console.log(`[Duplicate] Captured and saved new end-frame: ${imageUrl}`);
+      }
+    } catch (err) {
+      console.error("[Duplicate] Failed to capture frame during duplication:", err);
+      // Fallback to sourceImage.url is already set
+    }
+  }
   
   const [newImage] = await db.insert(images).values({
     projectId,
-    url: sourceImage.url,
+    url: imageUrl,
     filename: "CONTINUE_FRAME",
     order: allProjectImages.length + 1,
     duration: sourceImage.duration,

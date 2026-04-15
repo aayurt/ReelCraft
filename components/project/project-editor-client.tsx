@@ -83,6 +83,7 @@ export function ProjectEditorClient({ project, imagesList, videosList }: Project
   const handleGenerateComplete = async () => {
     const res = await fetch(`/api/projects/${project.id}`);
     const data = await res.json();
+    setImages(data.images || []);
     setVideos(data.videos || []);
     router.refresh();
   };
@@ -114,6 +115,7 @@ export function ProjectEditorClient({ project, imagesList, videosList }: Project
               projectId={project.id}
               onUploadComplete={handleUploadComplete}
               images={images}
+              videos={videos}
               onReorder={async (newImages) => {
                 setImages(newImages);
                 await fetch(`/api/projects/${project.id}/images/reorder`, {

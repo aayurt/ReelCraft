@@ -47,7 +47,20 @@ export function FrameModal({ image, onClose, onSave, onDelete }: FrameModalProps
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onClose}>
       <div className="bg-background rounded-lg p-6 max-w-md w-full mx-4" onClick={e => e.stopPropagation()}>
-        <h3 className="text-lg font-semibold mb-4">Frame {image.order || image.id}</h3>
+        <h3 className="text-lg font-semibold mb-2">Frame {image.order || image.id}</h3>
+        
+        <div className="mb-4 rounded-lg overflow-hidden border border-border aspect-video bg-muted relative">
+          <img 
+            src={image.url} 
+            alt={image.filename} 
+            className="w-full h-full object-cover"
+          />
+          {image.filename === "CONTINUE_FRAME" && (
+            <div className="absolute top-2 right-2 bg-primary/90 text-primary-foreground text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider shadow-sm">
+              Continuing
+            </div>
+          )}
+        </div>
         
         <div className="mb-4">
           <label className="block text-sm font-medium mb-2">

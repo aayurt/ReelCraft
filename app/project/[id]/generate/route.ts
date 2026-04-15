@@ -76,71 +76,123 @@ export async function POST(
       ];
 
       console.log(`Starting Qwen video generation for ${imagesToGenerate.length} frames...`);
-      console.log('Parallel for normal frames (using 18 users), sequential for CONTINUE frames...');
 
-      const qwenResults = await generateVideosMixed(
-        imagesToGenerate.map((img) => ({
+      const existingVideos = await db.query.videos.findMany({
+        where: eq(videos.projectId, projectId),
+      });
+      const videoPathMap = new Map(existingVideos.map(v => [v.imageId, v.url]));
+
+      // Validate dependencies for CONTINUE_FRAME and prepare predecessors
+      const qwenFrames = [];
+      const generatingFrameIds = new Set(imagesToGenerate.map(img => img.id));
+
+      for (const img of imagesToGenerate) {
+        const isContinue = img.filename === 'CONTINUE_FRAME';
+        let predecessorVideoPath: string | undefined;
+
+        if (isContinue) {
+          // Find the image that precedes this one in the global sortedImages list
+          const currentIndex = sortedImages.findIndex(i => i.id === img.id);
+          if (currentIndex <= 0) {
+            return Response.json({ error: `Frame ${img.id} is CONTINUE_FRAME but has no predecessor.` }, { status: 400 });
+          }
+
+          const predecessor = sortedImages[currentIndex - 1];
+          const hasExistingVideo = videoPathMap.has(predecessor.id);
+          const isBeingGenerated = generatingFrameIds.has(predecessor.id);
+
+          if (!hasExistingVideo && !isBeingGenerated) {
+            return Response.json({
+              error: `Frame ${img.id} is a continued frame, but its predecessor (Frame ${predecessor.id}) has not been generated yet. Please generate the predecessor first.`
+            }, { status: 400 });
+          }
+
+          if (hasExistingVideo) {
+            const relPath = videoPathMap.get(predecessor.id)!;
+            predecessorVideoPath = join(process.cwd(), relPath);
+          }
+        }
+
+        qwenFrames.push({
           id: img.id,
           url: img.url,
           filename: img.filename,
           duration: img.duration,
-          prompt: img.prompt
-            ? img.prompt
-            : generatePrompt(promptStyle as PromptStyle, customPrompt),
-        })),
+          prompt: img.prompt || generatePrompt(promptStyle as PromptStyle, customPrompt),
+          predecessorVideoPath
+        });
+      }
+
+      console.log('Parallel for normal frames/chains, sequential within chains...');
+
+      const results = await generateVideosMixed(
+        qwenFrames,
         authStatePaths,
         3
       );
 
-      console.log(`Generated ${qwenResults.length} videos with Qwen`);
+      console.log(`Generation complete. Processing ${results.length} results...`);
 
-      for (const result of qwenResults) {
+      const existingVideosForInsert = await db.query.videos.findMany({
+        where: eq(videos.projectId, projectId),
+      });
+      let nextVideoOrder = existingVideosForInsert.length + 1;
+
+      for (const result of results) {
         try {
+          console.log(`[Processing] Image ID: ${result.imageId}...`);
           const sourceVideoPath = result.videoPath;
-          const destFilename = `clip_${result.imageId}.mp4`;
+          const destFilename = `clip_${result.imageId}_${Date.now()}.mp4`;
           const destPath = join(outputDir, destFilename);
 
-          console.log(`Copying video from ${sourceVideoPath} to ${destPath}`);
-
           if (!existsSync(sourceVideoPath)) {
-            throw new Error(`Source video not found: ${sourceVideoPath}`);
+            console.warn(`[Processing] Source video not found for image ${result.imageId}: ${sourceVideoPath}`);
+            continue;
           }
 
+          console.log(`[Processing] Copying video to final storage: ${destFilename}`);
           await copyFile(sourceVideoPath, destPath);
 
-          if (!existsSync(destPath)) {
-            throw new Error(`Destination video not found after copy: ${destPath}`);
-          }
+          // Handle captured frame image if it exists
+          if (result.frameImagePath) {
+            const frameSourcePath = result.frameImagePath;
+            const frameDestFilename = `frame_image_${result.imageId}.jpg`;
+            const frameDestPath = join(outputDir, frameDestFilename);
 
-          console.log(`Video copied successfully: ${destFilename}`);
+            if (existsSync(frameSourcePath)) {
+              await copyFile(frameSourcePath, frameDestPath);
+              const frameRelUrl = `/uploads/videos/${id}/${frameDestFilename}`;
+
+              const currentIndex = sortedImages.findIndex(i => i.id === result.imageId);
+              if (currentIndex !== -1 && currentIndex < sortedImages.length - 1) {
+                const nextImage = sortedImages[currentIndex + 1];
+                if (nextImage.filename === 'CONTINUE_FRAME') {
+                  console.log(`[Processing] Updating NEXT frame ${nextImage.id} image to current end-frame: ${frameRelUrl}`);
+                  await db.update(images).set({
+                    url: frameRelUrl
+                  }).where(eq(images.id, nextImage.id));
+                }
+              }
+            }
+          }
 
           const img = imagesToGenerate.find((i) => i.id === result.imageId);
           const transitionType = img ? (frameTransitions[img.id] || project.transitionType) : project.transitionType;
           const transitionDuration = project.transitionDuration;
-
-          const existingVideos = await db.query.videos.findMany({
-            where: eq(videos.projectId, projectId),
-          });
 
           const [video] = await db.insert(videos).values({
             projectId,
             imageId: result.imageId,
             url: `/uploads/videos/${id}/${destFilename}`,
             filename: destFilename,
-            order: existingVideos.length + 1,
+            order: nextVideoOrder++,
             duration: img?.duration || 5,
             transitionType: transitionType as any,
             transitionDuration,
             source: 'qwen',
           }).returning();
 
-          console.log(`Video inserted into DB: ${video.id} - ${destFilename}`);
           generatedVideos.push(video);
-        } catch (videoError) {
-          console.error(`Failed to process video for imageId ${result.imageId}:`, videoError);
-        }
-      }
-
       console.log(`Successfully processed ${generatedVideos.length}/${qwenResults.length} videos`);
       return Response.json({ success: true, videos: generatedVideos });
     } else {
@@ -180,6 +232,33 @@ export async function POST(
           transitionDuration,
           source: 'local',
         }).returning();
+
+        // Capture end frame and update next image if it's a CONTINUE_FRAME
+        try {
+          const { captureFrame: captureLocalFrame } = await import('@/lib/video-generator');
+          const tempFramePath = await captureLocalFrame(outputPath, 'end');
+
+          const frameDestFilename = `frame_image_local_${img.id}.jpg`;
+          const frameDestPath = join(outputDir, frameDestFilename);
+
+          if (existsSync(tempFramePath)) {
+            await copyFile(tempFramePath, frameDestPath);
+            const frameRelUrl = `/uploads/videos/${id}/${frameDestFilename}`;
+
+            const currentIndex = sortedImages.findIndex(si => si.id === img.id);
+            if (currentIndex !== -1 && currentIndex < sortedImages.length - 1) {
+              const nextImage = sortedImages[currentIndex + 1];
+              if (nextImage.filename === 'CONTINUE_FRAME') {
+                console.log(`[Generate-Local] Updating NEXT frame ${nextImage.id} image to current end-frame: ${frameRelUrl}`);
+                await db.update(images).set({
+                  url: frameRelUrl
+                }).where(eq(images.id, nextImage.id));
+              }
+            }
+          }
+        } catch (captureErr) {
+          console.error("[Generate-Local] Failed to capture frame for sync:", captureErr);
+        }
 
         generatedVideos.push(video);
       }
