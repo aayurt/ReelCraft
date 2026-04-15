@@ -41,7 +41,9 @@ ssh $SERVER "bash -c '
   fi
   
   echo \"✅ Starting Reely...\"
-  pm2 restart ecosystem.config.js
+  pm2 delete ecosystem.config.js
+  pm2 start ecosystem.config.js
+
   pm2 save
   echo \"🎉 Deploy complete!\"
 '"

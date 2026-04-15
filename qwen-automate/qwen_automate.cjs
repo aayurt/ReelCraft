@@ -76,7 +76,10 @@ async function generateVideoFromImage(imagePath, prompt, outputName, authStatePa
   }
 
   const browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext({ storageState: authStatePath });
+  const context = await browser.newContext({
+    storageState: authStatePath, viewport: { width: 1280, height: 720 },
+    screen: { width: 1280, height: 720 },
+  });
   const page = await context.newPage();
 
   try {
@@ -182,6 +185,23 @@ async function generateVideoFromImage(imagePath, prompt, outputName, authStatePa
 
         if (!isModalOpen) {
           console.log('Video detected! Clicking qwen-video to open preview...');
+
+          const modelContent = await page.content();
+          if (modelContent.includes('Qwen Studio') || modelContent.includes('Big News')) {
+            console.log('Detected Qwen Studio modal, attempting to close...');
+            try {
+              const modalCloseBtn = page.locator('.qwen-chat-comp-update-modal-close');
+              if (await modalCloseBtn.isVisible({ timeout: 3000 })) {
+                await modalCloseBtn.click();
+                await page.waitForTimeout(1000);
+                console.log('Modal closed successfully');
+              }
+            } catch {
+              await page.keyboard.press('Escape');
+              await page.waitForTimeout(500);
+            }
+          }
+
           try {
             await videoLocator.click({ timeout: 5000 });
             await page.waitForTimeout(3000);

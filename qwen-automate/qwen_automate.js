@@ -76,7 +76,11 @@ async function generateVideoFromImage(imagePath, prompt, outputName, authStatePa
   }
 
   const browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext({ storageState: authStatePath });
+  const context = await browser.newContext({
+    storageState: authStatePath,
+    viewport: { width: 1280, height: 720 },
+    screen: { width: 1280, height: 720 },
+  });
   const page = await context.newPage();
 
   try {
@@ -274,7 +278,7 @@ async function generateVideoFromImage(imagePath, prompt, outputName, authStatePa
     await page.screenshot({ path: 'error_screenshot.png' });
     throw error;
   } finally {
-    // await browser.close();
+    await browser.close();
   }
 }
 
