@@ -6,7 +6,7 @@ const fs = require('fs');
 // CONFIGURATION & CONSTANTS
 // ==========================================
 const PARALLEL_EXECUTION_NUMBER = 1; // Number of parallel browsers
-const HEADLESS_MODE = false;
+const HEADLESS_MODE = true;
 const RETRY_ATTEMPTS = 5;
 
 const VIDEO_GENERATION_TIMEOUT = 2000000; // 2000s
@@ -274,10 +274,10 @@ async function generateVideoFromImage(imagePath, prompt, outputName, authStatePa
           break;
         }
       }
-      
+
       if (page.isClosed()) break;
       await page.waitForTimeout(5000);
-      
+
       const elapsed = Math.floor((Date.now() - startTime) / 1000);
       if (elapsed % 60 === 0) log(`Progress: Waiting... ${elapsed}s elapsed.`);
       await dismissQwenStudioModal(page);
