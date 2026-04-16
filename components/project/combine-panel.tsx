@@ -12,7 +12,7 @@ interface VideoClip {
   transitionType: string;
   transitionDuration: number;
   source: string;
-  imageId?: number;
+  imageId?: number | null;
 }
 
 interface CombinedVideo {

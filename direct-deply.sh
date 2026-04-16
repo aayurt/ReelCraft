@@ -16,6 +16,7 @@ echo "🚀 Starting deploy..."
 # echo "📁 Syncing uploads to server..."
 # rsync -avz "$LOCAL_PATH/uploads/" "$SERVER:$REMOTE_PATH/uploads/"
 
+
 # SSH: pull, build, and restart
 ssh $SERVER "bash -c '
   source ~/.nvm/nvm.sh
