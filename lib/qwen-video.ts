@@ -1,7 +1,6 @@
 import { spawn } from 'child_process';
-import { join, dirname } from 'path';
-import { access, mkdir } from 'fs/promises';
-import { writeFile, unlink } from 'fs/promises';
+import { access } from 'fs/promises';
+import { join } from 'path';
 
 interface QwenGenerateOptions {
   imagePath: string;
@@ -69,7 +68,7 @@ async function checkQwenAutomate(): Promise<boolean> {
 
 export async function generateVideoWithQwen(options: QwenGenerateOptions, maxRetries: number = 5): Promise<string> {
   const { imagePath, prompt, outputName, authStatePath } = options;
-  
+
   const hasAutomate = await checkQwenAutomate();
   if (!hasAutomate) {
     throw new Error('Qwen automate script not found. Please ensure qwen-automate directory exists.');
@@ -109,10 +108,10 @@ export async function generateVideoWithQwen(options: QwenGenerateOptions, maxRet
           const outputPath = join(process.cwd(), 'qwen-automate', 'outputs', outputName);
           resolve(outputPath);
         } else {
-          if (stderr.includes('Too many requests') || 
-              stderr.includes('Rate limit') || 
-              stderr.includes('quota exceeded') ||
-              stderr.includes('Requests rate limit exceeded')) {
+          if (stderr.includes('Too many requests') ||
+            stderr.includes('Rate limit') ||
+            stderr.includes('quota exceeded') ||
+            stderr.includes('Requests rate limit exceeded')) {
             reject(new RateLimitError(`Rate limit hit: ${stderr}`));
           } else {
             reject(new Error(`Qwen generation failed with code ${code}: ${stderr}`));
@@ -136,11 +135,11 @@ export async function generateVideoWithQwen(options: QwenGenerateOptions, maxRet
       lastError = error instanceof Error ? error : new Error(String(error));
       const isTimeout = lastError.message.includes('timed out');
       const isRateLimit = error instanceof RateLimitError;
-      
+
       if (isRateLimit) {
         throw error;
       }
-      
+
       if (i < maxRetries && isTimeout) {
         console.log(`Attempt ${i} timed out, retrying in 5 seconds...`);
         await new Promise(resolve => setTimeout(resolve, 5000));
@@ -150,16 +149,16 @@ export async function generateVideoWithQwen(options: QwenGenerateOptions, maxRet
       }
     }
   }
-  
+
   throw lastError || new Error('Qwen generation failed after all retries');
 }
 
 export async function generateVideosSequential(
-  frames: Array<{ 
-    id: number; 
-    url: string; 
-    filename: string; 
-    duration: number; 
+  frames: Array<{
+    id: number;
+    url: string;
+    filename: string;
+    duration: number;
     prompt: string;
   }>,
   authStatePath: string,
@@ -171,7 +170,7 @@ export async function generateVideosSequential(
   for (let i = 0; i < frames.length; i++) {
     const frame = frames[i];
     const isContinueFrame = frame.filename === 'CONTINUE_FRAME';
-    
+
     let imagePath: string;
     let prompt: string;
 
@@ -186,7 +185,7 @@ export async function generateVideosSequential(
     }
 
     const outputName = `clip_${frame.id}.mp4`;
-    
+
     try {
       const videoPath = await generateVideoWithQwen({
         imagePath,
@@ -209,11 +208,11 @@ export async function generateVideosSequential(
 }
 
 export async function generateVideosParallel(
-  frames: Array<{ 
-    id: number; 
-    url: string; 
-    filename: string; 
-    duration: number; 
+  frames: Array<{
+    id: number;
+    url: string;
+    filename: string;
+    duration: number;
     prompt: string;
   }>,
   authStatePaths: string[],
@@ -223,10 +222,10 @@ export async function generateVideosParallel(
   const queue = [...frames];
   const active: Array<{ promise: Promise<{ videoPath: string; imageId: number }>; frameId: number; authIndex: number }> = [];
   const completed: Set<number> = new Set();
-  
+
   // Semaphore for auth states
   const availableAuthIndices = new Set(authStatePaths.map((_, i) => i));
-  
+
   const acquireAuthIndex = async (): Promise<number> => {
     while (availableAuthIndices.size === 0) {
       await new Promise(resolve => setTimeout(resolve, 2000));
@@ -235,7 +234,7 @@ export async function generateVideosParallel(
     availableAuthIndices.delete(index);
     return index;
   };
-  
+
   const releaseAuthIndex = (index: number) => {
     availableAuthIndices.add(index);
   };
@@ -252,7 +251,7 @@ export async function generateVideosParallel(
       const outputName = `clip_${frame.id}.mp4`;
 
       let videoPath: string | undefined;
-      
+
       try {
         videoPath = await generateVideoWithQwen({
           imagePath,
@@ -313,11 +312,11 @@ export async function generateVideosParallel(
 }
 
 export async function generateVideosMixed(
-  frames: Array<{ 
-    id: number; 
-    url: string; 
-    filename: string; 
-    duration: number; 
+  frames: Array<{
+    id: number;
+    url: string;
+    filename: string;
+    duration: number;
     prompt: string;
     predecessorVideoPath?: string; // Path to video for CONTINUE_FRAME
   }>,
@@ -327,10 +326,10 @@ export async function generateVideosMixed(
   // Group frames into chains
   const chains: Array<typeof frames> = [];
   const frameMap = new Map(frames.map(f => [f.id, f]));
-  
+
   // Sort by order of appearance (assuming IDs or another way to track sequence)
   // For now, we assume 'frames' passed are in correct order of dependency if sequential.
-  
+
   let currentChain: typeof frames = [];
   for (const frame of frames) {
     const isContinue = frame.filename === 'CONTINUE_FRAME';
@@ -346,7 +345,7 @@ export async function generateVideosMixed(
   if (currentChain.length > 0) chains.push(currentChain);
 
   const results: Array<{ videoPath: string; imageId: number; frameImagePath?: string }> = [];
-  
+
   // Semaphore for auth states
   const availableAuthIndices = new Set(authStatePaths.map((_, i) => i));
   const acquireAuthIndex = async (): Promise<number> => {
@@ -370,13 +369,13 @@ export async function generateVideosMixed(
 
     try {
       let previousVideoPath = chain[0].predecessorVideoPath || null;
-      
+
       for (const frame of chain) {
         try {
           const isContinue = frame.filename === 'CONTINUE_FRAME';
           let imagePath: string;
           let frameImagePath: string | undefined;
-          
+
           if (isContinue && previousVideoPath) {
             console.log(`[Chain] Capturing end-frame from ${previousVideoPath} for frame ${frame.id}`);
             imagePath = await captureFrame(previousVideoPath, 'end');
@@ -385,7 +384,7 @@ export async function generateVideosMixed(
             const imageUrl = frame.url.startsWith('/') ? frame.url : `/${frame.url}`;
             imagePath = join(process.cwd(), imageUrl);
           }
-  
+
           const outputName = `clip_${frame.id}.mp4`;
           const videoPath = await generateVideoWithQwen({
             imagePath,
@@ -393,16 +392,16 @@ export async function generateVideosMixed(
             outputName,
             authStatePath: authStatePaths[authIndex]
           });
-  
+
           previousVideoPath = videoPath;
-          
+
           console.log(`[Chain] Capturing end-frame from ${videoPath} for frame ${frame.id}`);
           const endFramePath = await captureFrame(videoPath, 'end');
           results.push({ videoPath, imageId: frame.id, frameImagePath: endFramePath });
         } catch (error) {
           console.error(`[Chain] Error generating frame ${frame.id}:`, error);
           // If a frame fails in a chain, we MUST stop the chain because subsequent frames depend on it
-          break; 
+          break;
         }
       }
     } finally {
