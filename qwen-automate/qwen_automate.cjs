@@ -6,7 +6,7 @@ const fs = require('fs');
 // CONFIGURATION & CONSTANTS
 // ==========================================
 const PARALLEL_EXECUTION_NUMBER = 1; // Number of parallel browsers
-const HEADLESS_MODE = false;
+const HEADLESS_MODE = true;
 const RETRY_ATTEMPTS = 5;
 
 const VIDEO_GENERATION_TIMEOUT = 2000000; // 2000s
