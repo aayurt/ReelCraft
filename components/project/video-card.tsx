@@ -12,7 +12,9 @@ interface VideoCardProps {
     transitionType: string;
     transitionDuration: number;
     source: string;
+    imageId: number | null;
   };
+  thumbnailUrl?: string;
   selected?: boolean;
   onToggleSelect?: () => void;
   onClick?: () => void;
@@ -34,6 +36,7 @@ const TRANSITION_OPTIONS = [
 
 export function VideoCard({ 
   video, 
+  thumbnailUrl,
   selected = false,
   onToggleSelect,
   onClick,
@@ -136,20 +139,33 @@ export function VideoCard({
           </div>
         </div>
 
-        <video
-          ref={videoRef}
-          src={video.url}
-          className="w-full h-32 object-cover rounded cursor-pointer"
-          muted
-          loop
-          preload="metadata"
-          onPlay={() => setIsPlaying(true)}
-          onPause={() => setIsPlaying(false)}
-          onClick={(e) => {
-            e.stopPropagation();
-            onClick?.();
-          }}
-        />
+        {thumbnailUrl && !isPlaying ? (
+          <div className="relative w-full h-32 rounded overflow-hidden">
+            <img 
+              src={thumbnailUrl} 
+              alt={video.filename}
+              className="w-full h-full object-cover"
+            />
+            <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
+              <Play className="w-8 h-8 text-white fill-white ml-0.5 opacity-80" />
+            </div>
+          </div>
+        ) : (
+          <video
+            ref={videoRef}
+            src={video.url}
+            className="w-full h-32 object-cover rounded cursor-pointer"
+            muted
+            loop
+            preload="metadata"
+            onPlay={() => setIsPlaying(true)}
+            onPause={() => setIsPlaying(false)}
+            onClick={(e) => {
+              e.stopPropagation();
+              onClick?.();
+            }}
+          />
+        )}
         
         {/* Play/Pause Overlay */}
         <div 

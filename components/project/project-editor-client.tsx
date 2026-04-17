@@ -8,8 +8,7 @@ import { projects, images, generations } from "@/lib/schema";
 import { eq, and, desc } from "drizzle-orm";
 
 import { ImageGrid } from "@/components/project/image-grid";
-import { GeneratePanel } from "@/components/project/generate-panel";
-import { VideoTable } from "@/components/project/video-table";
+import { VideoGrid } from "@/components/project/video-grid";
 import { CombinePanel } from "@/components/project/combine-panel";
 
 interface ProjectEditorProps {
@@ -126,7 +125,7 @@ export function ProjectEditorClient({ project, imagesList, videosList }: Project
       <div className="grid grid-cols-3 gap-8">
         <div className="col-span-2 space-y-8">
           <div>
-            <h2 className="text-xl font-semibold mb-4">Storyboard</h2>
+            <h2 className="text-xl font-semibold mb-4">Timeline</h2>
             <CombinePanel
               projectId={project.id}
               transitionType={project.transitionType}
@@ -170,15 +169,42 @@ export function ProjectEditorClient({ project, imagesList, videosList }: Project
             />
           </div>
 
-          {/* Videos Table */}
+          {/* Videos */}
           {videos.length > 0 && (
             <div>
-              <h2 className="text-xl font-semibold mb-4">Generated Videos</h2>
-              <VideoTable
+              <h2 className="text-xl font-semibold mb-4">Videos</h2>
+              <VideoGrid
                 projectId={project.id}
                 videos={videos}
                 images={images}
-                onDelete={(id) => setVideos(videos.filter(v => v.id !== id))}
+                selectedVideoIds={selectedImageIds}
+                onToggleSelect={(id: number) => {
+                  setSelectedImageIds(prev =>
+                    prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+                  );
+                }}
+                onReorder={async (newVideos) => {
+                  setVideos(newVideos);
+                  await fetch(`/api/projects/${project.id}/videos/reorder`, {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ videos: newVideos.map(vid => ({ id: vid.id, order: vid.order })) }),
+                  });
+                }}
+                onUpdate={async (id: number, updates) => {
+                  setVideos(videos.map(vid => vid.id === id ? { ...vid, ...updates } : vid));
+                  await fetch(`/api/projects/${project.id}/videos/${id}`, {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(updates),
+                  });
+                }}
+                onDelete={async (id: number) => {
+                  setVideos(videos.filter(vid => vid.id !== id));
+                  await fetch(`/api/projects/${project.id}/videos/${id}`, {
+                    method: "DELETE"
+                  });
+                }}
               />
             </div>
           )}
@@ -206,22 +232,27 @@ export function ProjectEditorClient({ project, imagesList, videosList }: Project
 
           <hr className="border-border" />
 
-          {/* Generate Videos */}
-          <div>
-            <h2 className="text-xl font-semibold mb-1">Generate Videos</h2>
-            <p className="text-xs text-muted-foreground mb-4">Generate a clip for each frame. Set a transition after each clip.</p>
-            <GeneratePanel
-              projectId={project.id}
-              images={images}
-              onComplete={handleGenerateComplete}
-            />
+          <div className="space-y-3">
+            <a
+              href={`/project/${project.id}/produce`}
+              className="block w-full text-center bg-primary text-primary-foreground hover:bg-primary/90 px-4 py-2.5 rounded-md font-medium transition-opacity text-sm"
+            >
+              Generate Video
+            </a>
+            <a
+              href={`/project/${project.id}/produce`}
+              className="block w-full text-center bg-purple-600 hover:bg-purple-700 text-white px-4 py-2.5 rounded-md font-medium transition-opacity text-sm"
+            >
+              Prompt Generator
+            </a>
             <a
               href={`/project/${project.id}/videos`}
-              className="block text-center text-sm text-primary hover:underline mt-2"
+              className="block w-full text-center bg-background border border-border hover:bg-muted px-4 py-2.5 rounded-md font-medium transition-colors text-sm"
             >
-              Manage Videos →
+              Manage Videos
             </a>
           </div>
+          
         </div>
       </div>
     </div>

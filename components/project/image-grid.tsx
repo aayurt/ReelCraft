@@ -105,12 +105,14 @@ export function ImageGrid({
     const draggedIndex = newImages.findIndex((i) => i.id === draggedId);
     const targetIndex = newImages.findIndex((i) => i.id === targetId);
 
-    const [dragged] = newImages.splice(draggedIndex, 1);
-    newImages.splice(targetIndex, 0, dragged);
+    const draggedImage = newImages[draggedIndex];
+    const targetImage = newImages[targetIndex];
 
-    newImages.forEach((img, idx) => {
-      img.order = idx + 1; // 1-based ordering for user friendliness
-    });
+    const draggedOrder = draggedImage.order;
+    const targetOrder = targetImage.order;
+
+    draggedImage.order = targetOrder;
+    targetImage.order = draggedOrder;
 
     onReorder(newImages);
     setDraggedId(null);

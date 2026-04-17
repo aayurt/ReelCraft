@@ -13,11 +13,19 @@ interface Video {
   transitionType: string;
   transitionDuration: number;
   source: string;
+  imageId: number | null;
+}
+
+interface Image {
+  id: number;
+  url: string;
+  filename: string;
 }
 
 interface VideoGridProps {
   projectId: number;
   videos: Video[];
+  images?: Image[];
   selectedVideoIds: number[];
   onToggleSelect: (id: number) => void;
   onReorder: (videos: Video[]) => void;
@@ -34,6 +42,7 @@ function getOrdinal(n: number) {
 export function VideoGrid({ 
   projectId, 
   videos, 
+  images,
   selectedVideoIds,
   onToggleSelect,
   onReorder, 
@@ -70,20 +79,22 @@ export function VideoGrid({
   const handleDrop = (e: React.DragEvent, targetId: number) => {
     e.preventDefault();
     if (draggedId === null || draggedId === targetId) return;
-    
+
     const newVideos = [...videos];
     const draggedIndex = newVideos.findIndex((v) => v.id === draggedId);
     const targetIndex = newVideos.findIndex((v) => v.id === targetId);
-    
+
     if (draggedIndex === -1 || targetIndex === -1) return;
-    
-    const [dragged] = newVideos.splice(draggedIndex, 1);
-    newVideos.splice(targetIndex, 0, dragged);
-    
-    newVideos.forEach((vid, idx) => {
-      vid.order = idx + 1;
-    });
-    
+
+    const draggedVideo = newVideos[draggedIndex];
+    const targetVideo = newVideos[targetIndex];
+
+    const draggedOrder = draggedVideo.order;
+    const targetOrder = targetVideo.order;
+
+    draggedVideo.order = targetOrder;
+    targetVideo.order = draggedOrder;
+
     onReorder(newVideos);
     setDraggedId(null);
   };
@@ -93,6 +104,11 @@ export function VideoGrid({
   };
   
   const sorted = [...videos].sort((a, b) => a.order - b.order);
+
+  const getSourceImage = (imageId: number | null) => {
+    if (!imageId || !images) return null;
+    return images.find(img => img.id === imageId) || null;
+  };
   
   return (
     <div className="space-y-4">
@@ -110,6 +126,7 @@ export function VideoGrid({
             >
               <VideoCard
                 video={video}
+                thumbnailUrl={getSourceImage(video.imageId)?.url}
                 selected={selectedVideoIds.includes(video.id)}
                 onToggleSelect={() => onToggleSelect(video.id)}
                 onClick={() => setSelectedVideo(video)}

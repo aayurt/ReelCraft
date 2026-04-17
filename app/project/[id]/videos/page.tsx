@@ -42,6 +42,7 @@ export default async function VideosPage({
       transitionType: true,
       transitionDuration: true,
       source: true,
+      imageId: true,
     },
   });
   
