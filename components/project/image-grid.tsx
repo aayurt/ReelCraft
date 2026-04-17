@@ -1,7 +1,7 @@
 "use client";
 
 import { CheckSquare, X } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { FrameModal } from "./frame-modal";
 import { FramePromptList } from "./frame-prompt-list";
 import { ImageCard } from "./image-card";
@@ -57,6 +57,20 @@ export function ImageGrid({
   const [draggedId, setDraggedId] = useState<number | null>(null);
   const [uploading, setUploading] = useState(false);
   const [selectedImage, setSelectedImage] = useState<typeof images[number] | null>(null);
+  const [fileExistsMap, setFileExistsMap] = useState<Record<number, boolean>>({});
+
+  useEffect(() => {
+    fetch(`/api/projects/${projectId}/images/exists`)
+      .then(res => res.json())
+      .then((data: Array<{ id: number; exists: boolean }>) => {
+        const map: Record<number, boolean> = {};
+        data.forEach(item => {
+          map[item.id] = item.exists;
+        });
+        setFileExistsMap(map);
+      })
+      .catch(() => {});
+  }, [projectId]);
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files?.[0]) return;
@@ -163,6 +177,7 @@ export function ImageGrid({
               <ImageCard
                 image={image}
                 selected={selectedImageIds.includes(image.id)}
+                fileExists={fileExistsMap[image.id] ?? true}
                 onToggleSelect={() => onToggleSelect(image.id)}
                 status={
                   videos.some(v => v.imageId === image.id)

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { VideoCard } from "./video-card";
 import { VideoModal } from "./video-modal";
 
@@ -52,6 +52,20 @@ export function VideoGrid({
   const [draggedId, setDraggedId] = useState<number | null>(null);
   const [uploading, setUploading] = useState(false);
   const [selectedVideo, setSelectedVideo] = useState<Video | null>(null);
+  const [fileExistsMap, setFileExistsMap] = useState<Record<number, boolean>>({});
+
+  useEffect(() => {
+    fetch(`/api/projects/${projectId}/videos/exists`)
+      .then(res => res.json())
+      .then((data: Array<{ id: number; exists: boolean }>) => {
+        const map: Record<number, boolean> = {};
+        data.forEach(item => {
+          map[item.id] = item.exists;
+        });
+        setFileExistsMap(map);
+      })
+      .catch(() => {});
+  }, [projectId]);
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files?.[0]) return;
@@ -127,6 +141,7 @@ export function VideoGrid({
               <VideoCard
                 video={video}
                 thumbnailUrl={getSourceImage(video.imageId)?.url}
+                fileExists={fileExistsMap[video.id] ?? true}
                 selected={selectedVideoIds.includes(video.id)}
                 onToggleSelect={() => onToggleSelect(video.id)}
                 onClick={() => setSelectedVideo(video)}

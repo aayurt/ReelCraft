@@ -15,6 +15,7 @@ interface VideoCardProps {
     imageId: number | null;
   };
   thumbnailUrl?: string;
+  fileExists?: boolean;
   selected?: boolean;
   onToggleSelect?: () => void;
   onClick?: () => void;
@@ -37,6 +38,7 @@ const TRANSITION_OPTIONS = [
 export function VideoCard({ 
   video, 
   thumbnailUrl,
+  fileExists = true,
   selected = false,
   onToggleSelect,
   onClick,
@@ -139,18 +141,26 @@ export function VideoCard({
           </div>
         </div>
 
-        {thumbnailUrl && !isPlaying ? (
-          <div className="relative w-full h-32 rounded overflow-hidden">
+        {fileExists && thumbnailUrl && !isPlaying ? (
+          <div 
+            className="relative w-full h-32 rounded overflow-hidden cursor-pointer"
+            onClick={(e) => {
+              e.stopPropagation();
+              onClick?.();
+            }}
+          >
             <img 
               src={thumbnailUrl} 
               alt={video.filename}
               className="w-full h-full object-cover"
             />
-            <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
-              <Play className="w-8 h-8 text-white fill-white ml-0.5 opacity-80" />
-            </div>
+            {fileExists && (
+              <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
+                <Play className="w-8 h-8 text-white fill-white ml-0.5 opacity-80" />
+              </div>
+            )}
           </div>
-        ) : (
+        ) : fileExists ? (
           <video
             ref={videoRef}
             src={video.url}
@@ -165,20 +175,34 @@ export function VideoCard({
               onClick?.();
             }}
           />
-        )}
-        
-        {/* Play/Pause Overlay */}
-        <div 
-          className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer pointer-events-none"
-        >
-          <div className="bg-white/20 backdrop-blur-md rounded-full p-3 border border-white/30 transform transition-transform group-hover:scale-110">
-            {isPlaying ? (
-              <Pause className="w-6 h-6 text-white fill-white" />
-            ) : (
-              <Play className="w-6 h-6 text-white fill-white ml-0.5" />
-            )}
+        ) : !fileExists && thumbnailUrl ? (
+          <div className="relative w-full h-32 rounded overflow-hidden">
+            <img 
+              src={thumbnailUrl} 
+              alt={video.filename}
+              className="w-full h-full object-cover"
+              onClick={(e) => {
+                e.stopPropagation();
+                onClick?.();
+              }}
+            />
           </div>
-        </div>
+        ) : null}
+        
+        {/* Play/Pause Overlay - only show if file exists */}
+        {fileExists && (
+          <div 
+            className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer pointer-events-none"
+          >
+            <div className="bg-white/20 backdrop-blur-md rounded-full p-3 border border-white/30 transform transition-transform group-hover:scale-110">
+              {isPlaying ? (
+                <Pause className="w-6 h-6 text-white fill-white" />
+              ) : (
+                <Play className="w-6 h-6 text-white fill-white ml-0.5" />
+              )}
+            </div>
+          </div>
+        )}
 
         <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-end p-3 gap-2 pointer-events-none">
           <div className="flex gap-2 pointer-events-auto">

@@ -15,6 +15,7 @@ interface ImageCardProps {
     audioUrl: string | null;
   };
   status?: 'pending' | 'completed' | 'next' | 'uploaded';
+  fileExists?: boolean;
   selected?: boolean;
   onToggleSelect?: () => void;
   onClick: () => void;
@@ -25,6 +26,7 @@ interface ImageCardProps {
 export function ImageCard({ 
   image, 
   status = 'pending', 
+  fileExists = true,
   selected = false,
   onToggleSelect,
   onClick, 
@@ -92,9 +94,18 @@ export function ImageCard({
           className="w-full h-32 object-cover rounded shadow-sm border border-border transition-all duration-300"
         />
         {image.filename === "CONTINUE_FRAME" && (
-          <div className="absolute top-2 right-2 bg-primary/90 text-primary-foreground text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider shadow-sm z-10 border border-primary-foreground/20">
-            Continued
-          </div>
+          <>
+            <div className="absolute top-2 right-2 bg-primary/90 text-primary-foreground text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider shadow-sm z-10 border border-primary-foreground/20">
+              Continued
+            </div>
+            {!fileExists && (
+              <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
+                <span className="text-yellow-400 text-xs font-bold px-2 py-1 bg-black/50 rounded">
+                  Pending
+                </span>
+              </div>
+            )}
+          </>
         )}
       </div>
       <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity rounded flex flex-col items-center justify-center gap-3">
