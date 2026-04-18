@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/auth";
-import { projects, images, videos } from "@/lib/schema";
+import { projects, images, videos, characters } from "@/lib/schema";
 import { eq, and } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { ProjectEditorClient } from "@/components/project/project-editor-client";
@@ -59,11 +59,16 @@ export default async function ProjectEditorPage({
     },
   });
   
+  const projectCharacters = await db.query.characters.findMany({
+    where: eq(characters.projectId, projectId),
+  });
+  
   return (
     <ProjectEditorClient 
       project={project} 
       imagesList={projectImages}
       videosList={projectVideos}
+      charactersList={projectCharacters}
     />
   );
 }

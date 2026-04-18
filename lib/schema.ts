@@ -110,8 +110,22 @@ export const videos = pgTable("videos", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+export const characters = pgTable("characters", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id")
+    .notNull()
+    .references(() => projects.id),
+  name: varchar("name", { length: 255 }).notNull(),
+  visualDescription: text("visual_description").notNull(),
+  voiceDescription: text("voice_description").notNull(),
+  personality: text("personality"),
+  referenceImageUrl: text("reference_image_url"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export type User = typeof users.$inferSelect;
 export type Project = typeof projects.$inferSelect;
 export type Image = typeof images.$inferSelect;
 export type Generation = typeof generations.$inferSelect;
 export type Video = typeof videos.$inferSelect;
+export type Character = typeof characters.$inferSelect;

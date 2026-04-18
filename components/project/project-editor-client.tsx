@@ -10,6 +10,8 @@ import { eq, and, desc } from "drizzle-orm";
 import { ImageGrid } from "@/components/project/image-grid";
 import { VideoGrid } from "@/components/project/video-grid";
 import { CombinePanel } from "@/components/project/combine-panel";
+import { CharactersPanel } from "@/components/project/characters-panel";
+import { PromptGeneratorWizard } from "@/components/project/prompt-generator-wizard";
 
 interface ProjectEditorProps {
   project: {
@@ -41,14 +43,22 @@ interface ProjectEditorProps {
     source: string;
     imageId: number | null;
   }>;
+  charactersList?: Array<{
+    id: number;
+    name: string;
+    visualDescription: string;
+    voiceDescription: string;
+    personality: string | null;
+  }>;
 }
 
-export function ProjectEditorClient({ project, imagesList, videosList }: ProjectEditorProps) {
+export function ProjectEditorClient({ project, imagesList, videosList, charactersList }: ProjectEditorProps) {
   const router = useRouter();
   const [images, setImages] = useState(imagesList);
   const [videos, setVideos] = useState(videosList);
   const [saving, setSaving] = useState(false);
   const [selectedImageIds, setSelectedImageIds] = useState<number[]>([]);
+  const [showWizard, setShowWizard] = useState(false);
 
   const handleToggleSelect = (id: number) => {
     setSelectedImageIds(prev =>
@@ -211,6 +221,10 @@ export function ProjectEditorClient({ project, imagesList, videosList }: Project
         </div>
         
         <div className="space-y-8">
+          <CharactersPanel projectId={project.id} />
+
+          <hr className="border-border" />
+
           {/* Settings */}
           <div>
             <h2 className="text-xl font-semibold mb-4">Settings</h2>
@@ -239,12 +253,12 @@ export function ProjectEditorClient({ project, imagesList, videosList }: Project
             >
               Generate Video
             </a>
-            <a
-              href={`/project/${project.id}/produce`}
+            <button
+              onClick={() => setShowWizard(true)}
               className="block w-full text-center bg-purple-600 hover:bg-purple-700 text-white px-4 py-2.5 rounded-md font-medium transition-opacity text-sm"
             >
               Prompt Generator
-            </a>
+            </button>
             <a
               href={`/project/${project.id}/videos`}
               className="block w-full text-center bg-background border border-border hover:bg-muted px-4 py-2.5 rounded-md font-medium transition-colors text-sm"
@@ -255,6 +269,14 @@ export function ProjectEditorClient({ project, imagesList, videosList }: Project
           
         </div>
       </div>
+
+      {showWizard && (
+        <PromptGeneratorWizard
+          projectId={project.id}
+          images={images}
+          onClose={() => setShowWizard(false)}
+        />
+      )}
     </div>
   );
 }
