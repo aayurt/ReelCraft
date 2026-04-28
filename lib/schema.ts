@@ -6,6 +6,8 @@ export const users = pgTable("users", {
   name: text("name").notNull(),
   emailVerified: boolean("email_verified").default(false).notNull(),
   image: text("image"),
+  // User role for simple RBAC (e.g., 'user', 'moderator', 'admin')
+  role: text("role").default("user").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

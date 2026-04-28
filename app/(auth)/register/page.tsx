@@ -20,7 +20,8 @@ export default function RegisterPage() {
 
   useEffect(() => {
     client.getSession().then((session) => {
-      if (session) {
+      if (session && session.data) {
+        console.log("sesis", session)
         router.push("/dashboard");
       }
     });

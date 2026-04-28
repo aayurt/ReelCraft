@@ -1,0 +1,12 @@
+/* Minimal, design-system-aligned base styles (tokens live in Tailwind for production app) */
+.login-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  background: #0b0b0f;
+}
+.login-card {
+  width: 100%;
+  max-width: 28rem;
+}

@@ -6,13 +6,20 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { DashboardClient } from "@/components/dashboard-client";
 import { redirect } from "next/navigation";
+import { canAccess } from "@/lib/rbac";
 
 export default async function DashboardPage() {
   const headersList = await import("next/headers").then(h => h.headers());
   const session = await auth.api.getSession({ headers: headersList });
   console.log({ session })
+  // Server-side gating: require authentication first
   if (!session) {
     redirect("/login");
+  }
+  // If authenticated but not authorized, show NotAuthorized page
+  const isModerator = canAccess(session?.user as any, "VIEW_DASHBOARD");
+  if (!isModerator) {
+    redirect("/not-authorized");
   }
 
   const userProjects = await db.query.projects.findMany({

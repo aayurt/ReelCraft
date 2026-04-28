@@ -248,7 +248,7 @@ export function PromptGeneratorWizard({ projectId, images, onClose }: PromptGene
 
   return (
     <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-[100] p-4 backdrop-blur-sm">
-      <div className="relative bg-neutral-900 rounded-2xl overflow-hidden max-w-2xl w-full max-h-[90vh] shadow-2xl border border-white/10 flex flex-col">
+      <div className="relative bg-neutral-900 rounded-2xl overflow-visible max-w-2xl w-full max-h-[90vh] shadow-2xl border border-white/10 flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
           <h2 className="text-lg font-semibold text-white">{getStepTitle()}</h2>
           <button onClick={onClose} className="p-2 text-white/60 hover:text-white">

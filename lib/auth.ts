@@ -23,6 +23,15 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
     requireEmailVerification: false,
+    // Simple reset flow hook for development/testing; avoids hard requirements for email sending
+    sendResetPassword: async ({ user, url, token }, request) => {
+      // In a real deployment you would integrate with your email provider here.
+      // For local testing, just log to console so testers can observe the flow.
+      // eslint-disable-next-line no-console
+      console.log(
+        `Password reset requested for ${user?.email}. Reset URL: ${url} Token: ${token}`
+      );
+    },
   },
   trustedOrigins: [process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000"],
   plugins: [nextCookies()],
